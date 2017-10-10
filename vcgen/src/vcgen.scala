@@ -1,6 +1,11 @@
 import scala.util.parsing.combinator._
 import java.io.FileReader
 
+// TODO:
+// 1. modify the parser to handle logical assertions (how are these specified??), 
+// pre- and post- conditions, and loop invariants
+// 2. write a recursive function to go through the program AST
+// and compute the weakest precondition
 
 object VCGen {
 
@@ -30,6 +35,15 @@ object VCGen {
   case class BDisj(left: BoolExp, right: BoolExp) extends BoolExp
   case class BConj(left: BoolExp, right: BoolExp) extends BoolExp
   case class BParens(b: BoolExp) extends BoolExp
+
+  /* Assertions */
+  trait Assertion
+  // true | false | e1 = e2| e1 ≥ e2| A1 and A2| A1 or A2| A1 implies A2| ∀x.A | ∃x.A
+  // observe that assertion = Bexp (minus the Not part; not sure if that messes things up)
+  // + implies, forall, exists
+  case class Implies() extends Assertion
+  case class Forall() extends Assertion
+  case class Exists() extends Assertion
 
 
   /* Statements and blocks. */
@@ -94,6 +108,13 @@ object VCGen {
       }
     def bexp  : Parser[BoolExp] = bdisj
 
+    /* Parsing for Assertion */
+    def assn : Parser[Assertion] = 
+      // "forall" + var + assn
+      // "exists" + var + assn
+      // assn + "implies" + assn
+      // bexp
+
     /* Parsing for Statement and Block. */
     def block : Parser[Block] = rep(stmt)
     def stmt  : Parser[Statement] =
@@ -112,7 +133,7 @@ object VCGen {
       ("if" ~> bexp <~ "then") ~ (block <~ "end") ^^ {
         case c ~ t => If(c, t, Nil)
       } |
-      ("while" ~> (bexp /* ~ rep("inv" ~ assn) */) <~ "do") ~ (block <~ "end") ^^ {
+      ("while" ~> (bexp /*~ rep("inv" ~ assn)*/) <~ "do") ~ (block <~ "end") ^^ {
         case c ~ b => While(c, b)
       }
 
