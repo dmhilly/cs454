@@ -1,0 +1,10 @@
+(count,
+	List(
+		Assign(x,Num(0)), 
+		While(
+			BCmp((Var(x),<=,Num(10))),
+			List(Assign(x,Add(Var(x),Num(1))))
+		)
+	)
+)
+
