@@ -36,15 +36,6 @@ object VCGen {
   case class BConj(left: BoolExp, right: BoolExp) extends BoolExp
   case class BParens(b: BoolExp) extends BoolExp
 
-  /* Assertions */
-  trait Assertion
-  // true | false | e1 = e2| e1 ≥ e2| A1 and A2| A1 or A2| A1 implies A2| ∀x.A | ∃x.A
-  // observe that assertion = Bexp (minus the Not part; not sure if that messes things up)
-  // + implies, forall, exists
-  case class Implies() extends Assertion
-  case class Forall() extends Assertion
-  case class Exists() extends Assertion
-
 
   /* Statements and blocks. */
   trait Statement
@@ -56,6 +47,17 @@ object VCGen {
   case class If(cond: BoolExp, th: Block, el: Block) extends Statement
   case class While(cond: BoolExp, body: Block) extends Statement
 
+  /* Assertions. */
+  trait Assertion
+
+  case class ACmp(cmp: Comparison) extends Assertion
+  case class ANot(a: Assertion) extends Assertion
+  case class ADisj(left: Assertion, right: Assertion) extends Assertion
+  case class AConj(left: Assertion, right: Assertion) extends Assertion
+  case class AImplies(left: Assertion, right: Assertion) extends Assertion
+  case class AForall(x: String, impl: Assertion) extends Assertion
+  case class AExists(x: String, impl: Assertion) extends Assertion
+  case class AParens(a: Assertion) extends Assertion
 
   /* Complete programs. */
   type Program = Product2[String, Block]
