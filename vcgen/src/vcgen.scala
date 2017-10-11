@@ -47,6 +47,7 @@ object VCGen {
   case class If(cond: BoolExp, th: Block, el: Block) extends Statement
   case class While(cond: BoolExp, body: Block) extends Statement
 
+
   /* Assertions. */
   trait Assertion
 
@@ -55,8 +56,8 @@ object VCGen {
   case class ADisj(left: Assertion, right: Assertion) extends Assertion
   case class AConj(left: Assertion, right: Assertion) extends Assertion
   case class AImplies(left: Assertion, right: Assertion) extends Assertion
-  case class AForall(x: String, impl: Assertion) extends Assertion
-  case class AExists(x: String, impl: Assertion) extends Assertion
+  case class AForall(x: String, a: Assertion) extends Assertion
+  case class AExists(x: String, a: Assertion) extends Assertion
   case class AParens(a: Assertion) extends Assertion
 
   /* Complete programs. */
@@ -110,12 +111,24 @@ object VCGen {
       }
     def bexp  : Parser[BoolExp] = bdisj
 
-    /* Parsing for Assertion */
-    def assn : Parser[Assertion] = 
-      // "forall" + var + assn
-      // "exists" + var + assn
-      // assn + "implies" + assn
-      // bexp
+    /* Parsing for Assertion. */
+    def aatom: Parser[Assertion] =
+      "(" ~> assn <~ ")" | comp ^^ { ACmp(_) } | "!" ~> aatom ^^ { ANot(_) }
+    def aconj : Parser[Assertion] =
+      aconj ~ rep("&&" ~> aatom) ^^ {
+        case left ~ list => (left /: list) { AConj(_, _) }
+      }
+    def adisj : Parser[Assertion] =
+      aconj ~ rep("&&" ~> aconj) ^^ {
+        case left ~ list => (left /: list) { ADisj(_, _) }
+      }
+    def assn : Parser[Assertion] = adisj |
+      ("forall" ~> pvar) ~ ("," ~> adisj) ^^ {
+        case x ~ a => AForall(x, a)
+      } |
+      ("exists" ~> pvar) ~ ("," ~> adisj) ^^ {
+        case x ~ a => AExists(x, a)
+      }
 
     /* Parsing for Statement and Block. */
     def block : Parser[Block] = rep(stmt)
