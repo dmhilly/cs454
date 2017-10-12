@@ -45,11 +45,13 @@ object VCGen {
   case class Write(x: String, ind: ArithExp, value: ArithExp) extends Statement
   case class ParAssign(x1: String, x2: String, value1: ArithExp, value2: ArithExp) extends Statement
   case class If(cond: BoolExp, th: Block, el: Block) extends Statement
-  case class While(cond: BoolExp, body: Block) extends Statement
+  case class While(cond: BoolExp, inv: List[Assertion], body: Block) extends Statement
 
 
   /* Assertions. */
   trait Assertion
+  type Preconditions = List[Assertion]
+  type Postconditions = List[Assertion]
 
   case class ACmp(cmp: Comparison) extends Assertion
   case class ANot(a: Assertion) extends Assertion
@@ -61,7 +63,7 @@ object VCGen {
   case class AParens(a: Assertion) extends Assertion
 
   /* Complete programs. */
-  type Program = Product2[String, Block]
+  type Program = Product4[String, Preconditions, Postconditions, Block]
 
 
   object ImpParser extends RegexParsers {
@@ -115,18 +117,24 @@ object VCGen {
     def aatom: Parser[Assertion] =
       "(" ~> assn <~ ")" | comp ^^ { ACmp(_) } | "!" ~> aatom ^^ { ANot(_) }
     def aconj : Parser[Assertion] =
-      aconj ~ rep("&&" ~> aatom) ^^ {
+      aatom ~ rep("&&" ~> aatom) ^^ {
         case left ~ list => (left /: list) { AConj(_, _) }
       }
     def adisj : Parser[Assertion] =
-      aconj ~ rep("&&" ~> aconj) ^^ {
+      aconj ~ rep("||" ~> aconj) ^^ {
         case left ~ list => (left /: list) { ADisj(_, _) }
       }
-    def assn : Parser[Assertion] = adisj |
-      ("forall" ~> pvar) ~ ("," ~> adisj) ^^ {
+    def aimpl : Parser[Assertion] = 
+      adisj ~ ("==>" ~> adisj) ^^ {
+        case left ~ right => AImplies(left, right)
+      } |
+      adisj
+    def assn : Parser[Assertion] = 
+      aimpl |
+      ("forall" ~> pvar) ~ ("," ~> aimpl) ^^ {
         case x ~ a => AForall(x, a)
       } |
-      ("exists" ~> pvar) ~ ("," ~> adisj) ^^ {
+      ("exists" ~> pvar) ~ ("," ~> aimpl) ^^ {
         case x ~ a => AExists(x, a)
       }
 
@@ -148,14 +156,14 @@ object VCGen {
       ("if" ~> bexp <~ "then") ~ (block <~ "end") ^^ {
         case c ~ t => If(c, t, Nil)
       } |
-      ("while" ~> (bexp /*~ rep("inv" ~ assn)*/) <~ "do") ~ (block <~ "end") ^^ {
-        case c ~ b => While(c, b)
+      ("while" ~> (bexp ~ rep("inv" ~> assn)) <~ "do") ~ (block <~ "end") ^^ {
+        case c ~ list ~ b => While(c, list, b)
       }
 
     /* Parsing for Program. */
     def prog   : Parser[Program] =
-      ("program" ~> pvar <~ "is") ~ (block <~ "end") ^^ {
-        case n ~ b => (n, b)
+      ("program" ~> (pvar ~ rep("pre" ~> assn) ~ rep("post" ~> assn)) <~ "is") ~ (block <~ "end") ^^ {
+        case n ~ pre ~ post ~ b => (n, pre, post, b)
       }
   }
 
