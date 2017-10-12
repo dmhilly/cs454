@@ -170,6 +170,9 @@ object VCGen {
   def main(args: Array[String]): Unit = {
     val reader = new FileReader(args(0))
     import ImpParser._;
-    println(parseAll(prog, reader))
+    var parsedProgram = parseAll(prog, reader)
+    println(parsedProgram)
+    //var guardedProgram = computeGC(parsedProgram)
+    //var verificationConditions = genVC(guardedProgram)
   }
 }
