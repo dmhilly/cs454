@@ -3,8 +3,7 @@ import java.io.FileReader
 
 // TODO:
 // 1. parser written but faulty (find.imp not working for example)
-// 2. write havocVars function
-// 3. translate guarded commands into verification condition
+// 2. translate guarded commands into verification condition
 
 object VCGen {
 
@@ -176,6 +175,25 @@ object VCGen {
       }
   }
 
+  /* Constructs a guarded command which performs the havoc function on all vars in the block. */
+  def havocVars(b: Block): GuardedCommand = {
+    GuardedCommand gc = Assume(true)
+    for (statement <- block) {
+      if (statement.getClass == Assign) {
+        gc = Concat(gc, Havoc(statement.x))
+      } else if (statement.getClass == ParAssign) {
+        gc = Concat(gc, Concat(Havoc(statement.x1), Havoc(statement.x2)))
+      } else if (statement.getClass == Write) {
+        gc = Concat(gc, Havoc(statement.x))
+      } else if (statement.getClass == If) {
+        gc = Concat(gc, Concat(havocVars(statement.th), havocVars(statement.el)))
+      } else { // while
+        gc = Concat(gc, havocVars(statement.body))
+      }
+    }
+    return gc
+  }
+
   /* Returns expression e with all instances of x replaced with tmp. */
   def replace(e: ArithExp, x: String, tmp: String): ArithExp = {
     if (e.getClass == Num){
@@ -199,7 +217,7 @@ object VCGen {
         return Div(replace(e.left, x, tmp), replace(e.right, x, tmp))
       } else if (e.getClass == Mod) {
         return Mod(replace(e.left, x, tmp), replace(e.right, x, tmp))
-      } else {
+      } else { // Parens
         return Parens(replace(e.a, x, tmp))
       }
     }
@@ -258,7 +276,7 @@ object VCGen {
     var I = statement.inv
     var b = statement.cond
     var c = statement.body
-    var havocs = havocVars(c) // Concat(havoc(x), havoc(y))
+    var havocs = havocVars(c)
     return Concat(Assert(I), Concat(havocs, Concat(Assume(I), 
           Rect(Concat(Assume(b), Concat(GC(c), Assert(I))), Assume(Bnot(b))))))
   }
