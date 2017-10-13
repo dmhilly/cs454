@@ -2,10 +2,11 @@ import scala.util.parsing.combinator._
 import java.io.FileReader
 
 // TODO:
-// 1. modify the parser to handle logical assertions (how are these specified??), 
-// pre- and post- conditions, and loop invariants
-// 2. write a recursive function to go through the program AST
-// and compute the weakest precondition
+// 1. parser written but faulty (find.imp not working for example)
+// 2. translate Write statement into guarded commands
+// 3. write replace function
+// 4. write havocVars function
+// 5. translate guarded commands into verification condition
 
 object VCGen {
 
