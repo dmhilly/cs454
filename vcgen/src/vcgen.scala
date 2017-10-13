@@ -3,9 +3,8 @@ import java.io.FileReader
 
 // TODO:
 // 1. parser written but faulty (find.imp not working for example)
-// 2. write replace function
-// 3. write havocVars function
-// 4. translate guarded commands into verification condition
+// 2. write havocVars function
+// 3. translate guarded commands into verification condition
 
 object VCGen {
 
@@ -177,9 +176,33 @@ object VCGen {
       }
   }
 
+  /* Returns expression e with all instances of x replaced with tmp. */
   def replace(e: ArithExp, x: String, tmp: String): ArithExp = {
-    // return e with all instances of x replaced with tmp
-    return e
+    if (e.getClass == Num){
+      return e
+    } if (e.getClass == Var){
+      if (e.name == x) {
+        return Var(tmp)
+      } else {
+        return e
+      }
+    } else {
+      if (e.getClass == Read) {
+        return Read(replace(e.name, x, tmp), replace(e.ind, x, tmp))
+      } else if (e.getClass == Add) {
+        return Add(replace(e.left, x, tmp), replace(e.right, x, tmp))
+      } else if (e.getClass == Sub) {
+        return Sub(replace(e.left, x, tmp), replace(e.right, x, tmp))
+      } else if (e.getClass == Mul) {
+        return Mul(replace(e.left, x, tmp), replace(e.right, x, tmp))
+      } else if (e.getClass == Div) {
+        return Div(replace(e.left, x, tmp), replace(e.right, x, tmp))
+      } else if (e.getClass == Mod) {
+        return Mod(replace(e.left, x, tmp), replace(e.right, x, tmp))
+      } else {
+        return Parens(replace(e.a, x, tmp))
+      }
+    }
   }
 
   /* Translate an Assign statement into guarded commands. */
