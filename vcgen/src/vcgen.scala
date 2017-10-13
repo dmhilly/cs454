@@ -3,10 +3,9 @@ import java.io.FileReader
 
 // TODO:
 // 1. parser written but faulty (find.imp not working for example)
-// 2. translate Write statement into guarded commands
-// 3. write replace function
-// 4. write havocVars function
-// 5. translate guarded commands into verification condition
+// 2. write replace function
+// 3. write havocVars function
+// 4. translate guarded commands into verification condition
 
 object VCGen {
 
@@ -75,6 +74,7 @@ object VCGen {
   case class Havoc(x: String) extends GuardedCommand
   case class Concat(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
   case class Rect(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
+  case class GWrite(a: String, i: ArithExp, v: ArithExp) extends GuardedCommand
 
   object ImpParser extends RegexParsers {
     /* General helpers. */
@@ -194,7 +194,13 @@ object VCGen {
 
   /* Translate a Write statement into guarded commands. */
   def GCWrite(statement: Statement): GuardedCommand = {
-    // do translation here.
+    // GC(a[i] := v) = assume tmp = a; havoc a; assume (a = write(tmp, i, v))
+    var a = statement.x
+    var i = statement.ind
+    var v = statement.value
+    var tmp
+    return Concat(Assume(Bcmp(tmp, "=", a)), Concat(Havoc(a), 
+      Assume(Bcmp(a, "=", GWrite(tmp, i, v)))))
   }
 
   /* Translate a ParAssign statement into guarded commands. */
