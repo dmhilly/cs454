@@ -3,7 +3,8 @@ import java.io.FileReader
 
 // TODO:
 // 1. parser written but faulty (find.imp not working for example)
-// 2. translate guarded commands into verification condition
+// 2. figure out all this type stuff D:
+// 3. translate guarded commands into verification condition
 
 object VCGen {
 
@@ -68,6 +69,7 @@ object VCGen {
   trait GuardedCommand
 
   case class Assume(a: Assertion) extends GuardedCommand
+  //case class Assume(b: BoolExp) extends GuardedCommand
   case class Assert(b: Assertion) extends GuardedCommand
   case class Havoc(x: String) extends GuardedCommand
   case class Concat(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
@@ -177,18 +179,23 @@ object VCGen {
 
   /* Constructs a guarded command which performs the havoc function on all vars in the block. */
   def havocVars(b: Block): GuardedCommand = {
-    GuardedCommand gc = Assume(true)
-    for (statement <- block) {
+    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    for (statement <- b) {
       if (statement.getClass == Assign) {
-        gc = Concat(gc, Havoc(statement.x))
+        var aStatement = statement.asInstanceOf[Assign]
+        gc = Concat(gc, Havoc(aStatement.x))
       } else if (statement.getClass == ParAssign) {
-        gc = Concat(gc, Concat(Havoc(statement.x1), Havoc(statement.x2)))
+        var pStatement = statement.asInstanceOf[ParAssign]
+        gc = Concat(gc, Concat(Havoc(pStatement.x1), Havoc(pStatement.x2)))
       } else if (statement.getClass == Write) {
-        gc = Concat(gc, Havoc(statement.x))
+        var wStatement = statement.asInstanceOf[Write]
+        gc = Concat(gc, Havoc(wStatement.x))
       } else if (statement.getClass == If) {
-        gc = Concat(gc, Concat(havocVars(statement.th), havocVars(statement.el)))
+        var iStatement = statement.asInstanceOf[If]
+        gc = Concat(gc, Concat(havocVars(iStatement.th), havocVars(iStatement.el)))
       } else { // while
-        gc = Concat(gc, havocVars(statement.body))
+        var wStatement = statement.asInstanceOf[While]
+        gc = Concat(gc, havocVars(wStatement.body))
       }
     }
     return gc
@@ -198,79 +205,88 @@ object VCGen {
   def replace(e: ArithExp, x: String, tmp: String): ArithExp = {
     if (e.getClass == Num){
       return e
-    } if (e.getClass == Var){
-      if (e.name == x) {
+    } else if (e.getClass == Var){
+      var ve = e.asInstanceOf[Var]
+      if (ve.name == x) {
         return Var(tmp)
       } else {
-        return e
+        return ve
       }
     } else {
       if (e.getClass == Read) {
-        return Read(replace(e.name, x, tmp), replace(e.ind, x, tmp))
+        var re = e.asInstanceOf[Read]
+        return Read(re.name, replace(re.ind, x, tmp))
       } else if (e.getClass == Add) {
-        return Add(replace(e.left, x, tmp), replace(e.right, x, tmp))
+        var ae = e.asInstanceOf[Add]
+        return Add(replace(ae.left, x, tmp), replace(ae.right, x, tmp))
       } else if (e.getClass == Sub) {
-        return Sub(replace(e.left, x, tmp), replace(e.right, x, tmp))
+        var se = e.asInstanceOf[Sub]
+        return Sub(replace(se.left, x, tmp), replace(se.right, x, tmp))
       } else if (e.getClass == Mul) {
-        return Mul(replace(e.left, x, tmp), replace(e.right, x, tmp))
+        var me = e.asInstanceOf[Mul]
+        return Mul(replace(me.left, x, tmp), replace(me.right, x, tmp))
       } else if (e.getClass == Div) {
-        return Div(replace(e.left, x, tmp), replace(e.right, x, tmp))
+        var de = e.asInstanceOf[Div]
+        return Div(replace(de.left, x, tmp), replace(de.right, x, tmp))
       } else if (e.getClass == Mod) {
-        return Mod(replace(e.left, x, tmp), replace(e.right, x, tmp))
+        var me = e.asInstanceOf[Mod]
+        return Mod(replace(me.left, x, tmp), replace(me.right, x, tmp))
       } else { // Parens
-        return Parens(replace(e.a, x, tmp))
+        var pe = e.asInstanceOf[Parens]
+        return Parens(replace(pe.a, x, tmp))
       }
     }
   }
 
   /* Translate an Assign statement into guarded commands. */
-  def GCAssign(statement: Statement): GuardedCommand = {
+  def GCAssign(statement: Assign): GuardedCommand = {
     // GC(x := e) = assume tmp = x; havoc x; assume (x = e[tmp/x]);
     var x = statement.x
     var e = statement.value
-    var tmp
-    return Concat(Assume(Bcmp(tmp, "=", x)), 
-          Concat(Havoc(x), Assume(Bcmp(x, "=", replace(e, x, tmp)))))
+    var tmp = null
+    return Concat(Assume(ACmp((tmp, "=", Var(x)))), 
+          Concat(Havoc(x), Assume(ACmp((Var(x), "=", replace(e, x, tmp))))))
   }
 
   /* Translate a Write statement into guarded commands. */
-  def GCWrite(statement: Statement): GuardedCommand = {
+  def GCWrite(statement: Write): GuardedCommand = {
     // GC(a[i] := v) = assume tmp = a; havoc a; assume (a = write(tmp, i, v))
     var a = statement.x
     var i = statement.ind
     var v = statement.value
-    var tmp
-    return Concat(Assume(Bcmp(tmp, "=", a)), Concat(Havoc(a), 
-      Assume(Bcmp(a, "=", GWrite(tmp, i, v)))))
+    var tmp = null
+    return Concat(Assume(ACmp((tmp, "=", Var(a)))), Concat(Havoc(a), 
+      Assume(ACmp((Var(a), "=", GWrite(tmp, i, v))))))
   }
 
   /* Translate a ParAssign statement into guarded commands. */
-  def GCParAssign(statement: Statement): GuardedCommand = {
+  def GCParAssign(statement: ParAssign): GuardedCommand = {
     // GC(x1, x2 := e1, e2) = assume tmp1 = x1; assume tmp2 = x2; havoc x1; havoc x2;
     // assume (x1 = e1[tmp1/x1]); assume (x2 = e2[tmp2/x2]);
     var x1 = statement.x1
     var x2 = statement.x2
     var e1 = statement.value1
     var e2 = statement.value2
-    var tmp1
-    var tmp2
-    return Concat(Assume(Bcmp(tmp1, "=", x1)), 
-          Concat(Assume(Bcmp(tmp2, "=", x2)), Concat(Havoc(x1), Concat(Havoc(x2),
-          Concat(Assume(Bcmp(x1, "=", replace(e1, x1, tmp1))), 
-          Assume(Bcmp(x2, "=", replace(e2, x2, tmp2))))))))
+    var tmp1 = null
+    var tmp2 = null
+    return Concat(Assume(ACmp((tmp1, "=", Var(x1)))), 
+          Concat(Assume(ACmp((tmp2, "=", Var(x2)))), Concat(Havoc(x1), Concat(Havoc(x2),
+          Concat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
+          Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2)))))))))
   }
 
   /* Translate an If statement into guarded commands. */
-  def GCIf(statement: Statement): GuardedCommand = {
+  def GCIf(statement: If): GuardedCommand = {
     // GC(if b then c1 else c2) = (assume b; GC(c1)) [] (assume !b; GC(c2))
     var b = statement.cond
     var c1 = statement.th
     var c2 = statement.el
-    return Rect(Concat(Assume(b), GC(c1)), Concat(Assume(BNot(b)), GC(c2)))
+    return Rect(Concat(Assume(ACmp((b, "=", true))), GC(c1)), 
+      Concat(Assume(ANot(ACmp((b, "=", true)))), GC(c2)))
   }
 
   /* Translate a While statement into guarded commands. */
-  def GCWhile(statement: Statement): GuardedCommand = {
+  def GCWhile(statement: While): GuardedCommand = {
     // GC({I} while b do c) = assert I; havoc x1; ...; havoc xn; assume I;
     // (assume b; GC(c); assert I; assume false) [] assume !b
     var I = statement.inv
@@ -278,23 +294,24 @@ object VCGen {
     var c = statement.body
     var havocs = havocVars(c)
     return Concat(Assert(I), Concat(havocs, Concat(Assume(I), 
-          Rect(Concat(Assume(b), Concat(GC(c), Assert(I))), Assume(Bnot(b))))))
+          Rect(Concat(Assume(ACmp((b, "=", true))), Concat(GC(c), 
+          Assert(I))), Assume(ANot(ACmp((b, "=", true))))))))
   }
 
   /* Translates each statement in the block into a loop-free guarded command. */
   def GC(block: Block): GuardedCommand = {
-    GuardedCommand gc = Assume(true)
+    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
     for (statement <- block) {
       if (statement.getClass == Assign) {
-        gc = Concat(gc, GCAssign(statement))
+        gc = Concat(gc, GCAssign(statement.asInstanceOf[Assign]))
       } else if (statement.getClass == Write) {
-        gc = Concat(gc, GCWrite(statement))
+        gc = Concat(gc, GCWrite(statement.asInstanceOf[Write]))
       } else if (statement.getClass == ParAssign) {
-        gc = Concat(gc, GCParAssign(statement))
+        gc = Concat(gc, GCParAssign(statement.asInstanceOf[ParAssign]))
       } else if (statement.getClass == If) {
-        gc = Concat(gc, GCIf(statement))
+        gc = Concat(gc, GCIf(statement.asInstanceOf[If]))
       } else if (statement.getClass == While) {
-        gc = Concat(gc, GCWhile(statement))
+        gc = Concat(gc, GCWhile(statement.asInstanceOf[While]))
       }
     }
     return gc
@@ -303,16 +320,16 @@ object VCGen {
   /* Returns the program in loop-free guarded commands. */
   def computeGC(program: Product4): Product2 = {
     // want to return (programName, c_H)
-    GuardedCommand command = GC(program[3])
-    var precond
-    for (pre <- program[1]) {
+    var command : GuardedCommand = GC(program.element(3))
+    var precond : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    for (pre <- program.element(1)) {
       precond = Concat(precond, pre)
     } 
     command = Concat(precond, command)
-    for (post <- program[2]){
+    for (post <- program.element(2)){
       command = Concat(command, post)
     }
-    return (program[0], command)
+    return (program.element(0), command)
   }
 
   def main(args: Array[String]): Unit = {
