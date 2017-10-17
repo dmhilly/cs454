@@ -20,6 +20,7 @@ object VCGen {
   case class Div(left: ArithExp, right: ArithExp) extends ArithExp
   case class Mod(left: ArithExp, right: ArithExp) extends ArithExp
   case class Parens(a: ArithExp) extends ArithExp
+  case class AWrite(a: String, i: ArithExp, v: ArithExp) extends ArithExp
 
 
   /* Comparisons of arithmetic expressions. */
@@ -69,12 +70,11 @@ object VCGen {
   trait GuardedCommand
 
   case class Assume(a: Assertion) extends GuardedCommand
-  //case class Assume(b: BoolExp) extends GuardedCommand
+  case class BAssume(b: BoolExp) extends GuardedCommand
   case class Assert(b: Assertion) extends GuardedCommand
   case class Havoc(x: String) extends GuardedCommand
   case class Concat(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
   case class Rect(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
-  case class GWrite(a: String, i: ArithExp, v: ArithExp) extends GuardedCommand
 
   object ImpParser extends RegexParsers {
     /* General helpers. */
@@ -201,6 +201,24 @@ object VCGen {
     return gc
   }
 
+  /* Returns "Assert(I)", ie. the Assert function applied to every assertion in I. */
+  def assertAll(I: List[Assertion]): GuardedCommand = {
+    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    for (assertion <- I){
+      gc = Concat(gc, Assert(assertion))
+    }
+    return gc
+  }
+
+  /* Returns "Assume(I)", ie. the Assume function applied to every assertion in I. */
+  def assumeAll(I: List[Assertion]): GuardedCommand = {
+    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    for (assertion <- I){
+      gc = Concat(gc, Assume(assertion))
+    }
+    return gc
+  }
+
   /* Returns expression e with all instances of x replaced with tmp. */
   def replace(e: ArithExp, x: String, tmp: String): ArithExp = {
     if (e.getClass == Num){
@@ -256,7 +274,7 @@ object VCGen {
     var v = statement.value
     var tmp = null
     return Concat(Assume(ACmp((tmp, "=", Var(a)))), Concat(Havoc(a), 
-      Assume(ACmp((Var(a), "=", GWrite(tmp, i, v))))))
+      Assume(ACmp((Var(a), "=", AWrite(tmp, i, v))))))
   }
 
   /* Translate a ParAssign statement into guarded commands. */
@@ -281,8 +299,8 @@ object VCGen {
     var b = statement.cond
     var c1 = statement.th
     var c2 = statement.el
-    return Rect(Concat(Assume(ACmp((b, "=", true))), GC(c1)), 
-      Concat(Assume(ANot(ACmp((b, "=", true)))), GC(c2)))
+    return Rect(Concat(BAssume(b), GC(c1)), 
+      Concat(BAssume(BNot(b)), GC(c2)))
   }
 
   /* Translate a While statement into guarded commands. */
@@ -293,9 +311,11 @@ object VCGen {
     var b = statement.cond
     var c = statement.body
     var havocs = havocVars(c)
-    return Concat(Assert(I), Concat(havocs, Concat(Assume(I), 
-          Rect(Concat(Assume(ACmp((b, "=", true))), Concat(GC(c), 
-          Assert(I))), Assume(ANot(ACmp((b, "=", true))))))))
+    var assertions = assertAll(I)
+    var assumptions = assumeAll(I)
+    return Concat(assertions, Concat(havocs, Concat(assumptions, 
+          Rect(Concat(BAssume(b), Concat(GC(c), 
+          assertions)), BAssume(BNot(b))))))
   }
 
   /* Translates each statement in the block into a loop-free guarded command. */
@@ -318,18 +338,11 @@ object VCGen {
   }
 
   /* Returns the program in loop-free guarded commands. */
-  def computeGC(program: Product4): Product2 = {
+  def computeGC(pre: Preconditions, post: Postconditions, block: Block): GuardedCommand = {
     // want to return (programName, c_H)
-    var command : GuardedCommand = GC(program.element(3))
-    var precond : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
-    for (pre <- program.element(1)) {
-      precond = Concat(precond, pre)
-    } 
-    command = Concat(precond, command)
-    for (post <- program.element(2)){
-      command = Concat(command, post)
-    }
-    return (program.element(0), command)
+    var command : GuardedCommand = GC(block)
+    Concat(assumeAll(pre), Concat(command, assumeAll(post)))
+    return command
   }
 
   def main(args: Array[String]): Unit = {
@@ -337,7 +350,10 @@ object VCGen {
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
     println(parsedProgram)
-    //var guardedProgram = computeGC(parsedProgram)
+    val preconditions = parsedProgram._1
+    val postconditions = parsedProgram._2
+    val block = parsedProgram._3
+    var guardedProgram = computeGC(preconditions, postconditions, block)
     //var verificationConditions = genVC(guardedProgram)
   }
 }
