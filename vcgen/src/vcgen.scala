@@ -6,7 +6,7 @@ import java.io.FileReader
 // 2. figure out all this type stuff D:
 // 3. translate guarded commands into verification condition
 
-//hey
+//hey :)
 
 object VCGen {
 
