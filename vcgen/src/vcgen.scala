@@ -6,8 +6,6 @@ import java.io.FileReader
 // 2. figure out all this type stuff D:
 // 3. translate guarded commands into verification condition
 
-//hey :)
-
 object VCGen {
 
   /* Arithmetic expressions. */
@@ -72,11 +70,15 @@ object VCGen {
   trait GuardedCommand
 
   case class Assume(a: Assertion) extends GuardedCommand
-  case class BAssume(b: BoolExp) extends GuardedCommand
-  case class Assert(b: Assertion) extends GuardedCommand
+  case class BAssume(a: BoolExp) extends GuardedCommand
+  case class Assert(a: Assertion) extends GuardedCommand
   case class Havoc(x: String) extends GuardedCommand
   case class Concat(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
   case class Rect(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
+
+  trait WeakestPrecondition
+
+  case class State(b: Assertion) extends WeakestPrecondition
 
   object ImpParser extends RegexParsers {
     /* General helpers. */
@@ -183,16 +185,16 @@ object VCGen {
   def havocVars(b: Block): GuardedCommand = {
     var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
     for (statement <- b) {
-      if (statement.getClass == Assign) {
+      if (statement.isInstanceOf[Assign]) {
         var aStatement = statement.asInstanceOf[Assign]
         gc = Concat(gc, Havoc(aStatement.x))
-      } else if (statement.getClass == ParAssign) {
+      } else if (statement.isInstanceOf[ParAssign]) {
         var pStatement = statement.asInstanceOf[ParAssign]
         gc = Concat(gc, Concat(Havoc(pStatement.x1), Havoc(pStatement.x2)))
-      } else if (statement.getClass == Write) {
+      } else if (statement.isInstanceOf[Write]) {
         var wStatement = statement.asInstanceOf[Write]
         gc = Concat(gc, Havoc(wStatement.x))
-      } else if (statement.getClass == If) {
+      } else if (statement.isInstanceOf[If]) {
         var iStatement = statement.asInstanceOf[If]
         gc = Concat(gc, Concat(havocVars(iStatement.th), havocVars(iStatement.el)))
       } else { // while
@@ -223,9 +225,9 @@ object VCGen {
 
   /* Returns expression e with all instances of x replaced with tmp. */
   def replace(e: ArithExp, x: String, tmp: String): ArithExp = {
-    if (e.getClass == Num){
+    if (e.isInstanceOf[Num]){
       return e
-    } else if (e.getClass == Var){
+    } else if (e.isInstanceOf[Var]){
       var ve = e.asInstanceOf[Var]
       if (ve.name == x) {
         return Var(tmp)
@@ -233,22 +235,22 @@ object VCGen {
         return ve
       }
     } else {
-      if (e.getClass == Read) {
+      if (e.isInstanceOf[Read]) {
         var re = e.asInstanceOf[Read]
         return Read(re.name, replace(re.ind, x, tmp))
-      } else if (e.getClass == Add) {
+      } else if (e.isInstanceOf[Add]) {
         var ae = e.asInstanceOf[Add]
         return Add(replace(ae.left, x, tmp), replace(ae.right, x, tmp))
-      } else if (e.getClass == Sub) {
+      } else if (e.isInstanceOf[Sub]) {
         var se = e.asInstanceOf[Sub]
         return Sub(replace(se.left, x, tmp), replace(se.right, x, tmp))
-      } else if (e.getClass == Mul) {
+      } else if (e.isInstanceOf[Mul]) {
         var me = e.asInstanceOf[Mul]
         return Mul(replace(me.left, x, tmp), replace(me.right, x, tmp))
-      } else if (e.getClass == Div) {
+      } else if (e.isInstanceOf[Div]) {
         var de = e.asInstanceOf[Div]
         return Div(replace(de.left, x, tmp), replace(de.right, x, tmp))
-      } else if (e.getClass == Mod) {
+      } else if (e.isInstanceOf[Mod]) {
         var me = e.asInstanceOf[Mod]
         return Mod(replace(me.left, x, tmp), replace(me.right, x, tmp))
       } else { // Parens
@@ -324,15 +326,15 @@ object VCGen {
   def GC(block: Block): GuardedCommand = {
     var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
     for (statement <- block) {
-      if (statement.getClass == Assign) {
+      if (statement.isInstanceOf[Assign]) {
         gc = Concat(gc, GCAssign(statement.asInstanceOf[Assign]))
-      } else if (statement.getClass == Write) {
+      } else if (statement.isInstanceOf[Write]) {
         gc = Concat(gc, GCWrite(statement.asInstanceOf[Write]))
-      } else if (statement.getClass == ParAssign) {
+      } else if (statement.isInstanceOf[ParAssign]) {
         gc = Concat(gc, GCParAssign(statement.asInstanceOf[ParAssign]))
-      } else if (statement.getClass == If) {
+      } else if (statement.isInstanceOf[If]) {
         gc = Concat(gc, GCIf(statement.asInstanceOf[If]))
-      } else if (statement.getClass == While) {
+      } else if (statement.isInstanceOf[While]) {
         gc = Concat(gc, GCWhile(statement.asInstanceOf[While]))
       }
     }
@@ -343,8 +345,69 @@ object VCGen {
   def computeGC(pre: Preconditions, post: Postconditions, block: Block): GuardedCommand = {
     // want to return (programName, c_H)
     var command : GuardedCommand = GC(block)
-    Concat(assumeAll(pre), Concat(command, assumeAll(post)))
+    command = Concat(assumeAll(pre), Concat(command, assumeAll(post)))
     return command
+  }
+
+  def replaceAssertion(assert: Assertion, x: String, tmp: String): Assertion = {
+    if (assert.isInstanceOf[ACmp]) {
+      var acassert = assert.asInstanceOf[ACmp]
+      return ACmp(replace(acassert.cmp._1, x, tmp), acassert.cmp._2, 
+        replace(acassert.cmp._3, x, tmp))
+    } else if (assert.isInstanceOf[ANot]) {
+      var anassert = assert.asInstanceOf[ANot]
+      return ANot(replaceAssertion(anassert.a, x, tmp))
+    } else if (assert.isInstanceOf[ADisj]) {
+      var adassert = assert.asInstanceOf[ADisj]
+      return ADisj(replaceAssertion(adassert.left, x, tmp), 
+        replaceAssertion(adassert.right, x, tmp))
+    } else if (assert.isInstanceOf[AConj]) {
+      var acoassert = assert.asInstanceOf[AConj]
+      return AConj(replaceAssertion(acoassert.left, x, tmp),
+        replaceAssertion(acoassert.right, x, tmp))
+    } else if (assert.isInstanceOf[AImplies]) {
+      var aiassert = assert.asInstanceOf[AImplies]
+      return AImplies(replaceAssertion(aiassert.left, x, tmp),
+        replaceAssertion(aiassert.right, x, tmp))
+    } else if (assert.isInstanceOf[AForall]) {
+      var afassert = assert.asInstanceOf[AForall]
+      return AForall(afassert.x, replaceAssertion(afassert.a, x, tmp))
+    } else if (assert.isInstanceOf[AExists]) {
+      var aeassert = assert.asInstanceOf[AExists]
+      return AExists(aeassert.x, replaceAssertion(aeassert.a, x, tmp))
+    } else {
+      var apassert = assert.asInstanceOf[AParens]
+      return AParens(replaceAssertion(apassert.a, x, tmp))
+    }
+  }
+
+  def WP(gC: GuardedCommand, b: Assertion): Assertion = {
+    var wp : Assertion = ACmp((Num(1), "=", Num(1)))
+    if (gC.isInstanceOf[Assume]) {
+      var assume = gC.asInstanceOf[Assume]
+      wp = AImplies(assume.a, b)
+    // } else if (gC.isInstanceOf[BAssume]) {
+    //   var bassume = gC.asInstanceOf[BAssume]
+    //   wp = AImplies(bassume.a, b)
+    } else if (gC.isInstanceOf[Assert]) {
+      var assert = gC.asInstanceOf[Assert]
+      wp = AConj(assert.a, b)
+    } else if (gC.isInstanceOf[Havoc]) {
+      var havoc = gC.asInstanceOf[Havoc]
+      wp = replaceAssertion(b, havoc.x, null) //tmp == null???
+    } else if (gC.isInstanceOf[Concat]) {
+      var concat = gC.asInstanceOf[Concat]
+      wp = WP(concat.c1, WP(concat.c2, b))
+    } else {
+      var rect = gC.asInstanceOf[Rect]
+      wp = AConj(WP(rect.c1, b), WP(rect.c2, b))
+    }
+    return wp
+  }
+
+  def genVC(gC: GuardedCommand, b: Assertion): Assertion = {
+    var verificationCondition = WP(gC, b)
+    return verificationCondition
   }
 
   def main(args: Array[String]): Unit = {
@@ -352,10 +415,12 @@ object VCGen {
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
     println(parsedProgram)
-    val preconditions = parsedProgram._1
-    val postconditions = parsedProgram._2
-    val block = parsedProgram._3
+    val preconditions = parsedProgram.get._2
+    val postconditions = parsedProgram.get._3
+    val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
-    //var verificationConditions = genVC(guardedProgram)
+    println(guardedProgram)
+    var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))))
+    println(verificationConditions)
   }
 }
