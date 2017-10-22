@@ -415,7 +415,7 @@ object VCGen {
 
   /* Translates the guarded program into a verification condition */
   def genVC(gC: GuardedCommand, b: Assertion): Assertion = {
-    var wp : Assertion = null
+    var wp : Assertion = null 
     if (gC.isInstanceOf[Assume]) {
       var assume = gC.asInstanceOf[Assume]
       return AImplies(assume.a, b)
