@@ -3,8 +3,8 @@ import java.io.FileReader
 
 // TODO:
 // 1. parser written but faulty (find.imp not working for example)
-// 2. figure out all this type stuff D:
-// 3. translate guarded commands into verification condition
+// 2. Add the extra things from Bill’s list
+// 3. create a print function that turns our command into SMT LIB forma
 
 object VCGen {
 
