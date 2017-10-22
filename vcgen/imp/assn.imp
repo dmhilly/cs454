@@ -1,0 +1,3 @@
+program assn is
+  x := 0;
+end
