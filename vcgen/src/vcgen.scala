@@ -5,6 +5,7 @@ import java.io.FileReader
 // 1. parser written but faulty (find.imp not working for example)
 // 2. Add the extra things from Bill’s list
 // 3. create a print function that turns our command into SMT LIB forma
+// 4. what to name temporary variables
 
 object VCGen {
 
@@ -181,25 +182,35 @@ object VCGen {
       }
   }
 
+  /* Concats two guarded commands together, unless one is null. */
+  def smartConcat(gc1: GuardedCommand, gc2: GuardedCommand): GuardedCommand = {
+    if (gc1 == null){
+      return gc2
+    } else if (gc2 == null){
+      return gc1
+    }
+    return Concat(gc1, gc2)
+  }
+
   /* Constructs a guarded command which performs the havoc function on all vars in the block. */
   def havocVars(b: Block): GuardedCommand = {
-    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    var gc : GuardedCommand = null 
     for (statement <- b) {
       if (statement.isInstanceOf[Assign]) {
         var aStatement = statement.asInstanceOf[Assign]
-        gc = Concat(gc, Havoc(aStatement.x))
+        gc = smartConcat(gc, Havoc(aStatement.x))
       } else if (statement.isInstanceOf[ParAssign]) {
         var pStatement = statement.asInstanceOf[ParAssign]
-        gc = Concat(gc, Concat(Havoc(pStatement.x1), Havoc(pStatement.x2)))
+        gc = smartConcat(gc, Concat(Havoc(pStatement.x1), Havoc(pStatement.x2)))
       } else if (statement.isInstanceOf[Write]) {
         var wStatement = statement.asInstanceOf[Write]
-        gc = Concat(gc, Havoc(wStatement.x))
+        gc = smartConcat(gc, Havoc(wStatement.x))
       } else if (statement.isInstanceOf[If]) {
         var iStatement = statement.asInstanceOf[If]
-        gc = Concat(gc, Concat(havocVars(iStatement.th), havocVars(iStatement.el)))
+        gc = smartConcat(gc, Concat(havocVars(iStatement.th), havocVars(iStatement.el)))
       } else { // while
         var wStatement = statement.asInstanceOf[While]
-        gc = Concat(gc, havocVars(wStatement.body))
+        gc = smartConcat(gc, havocVars(wStatement.body))
       }
     }
     return gc
@@ -207,18 +218,18 @@ object VCGen {
 
   /* Returns "Assert(I)", ie. the Assert function applied to every assertion in I. */
   def assertAll(I: List[Assertion]): GuardedCommand = {
-    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    var gc : GuardedCommand = null
     for (assertion <- I){
-      gc = Concat(gc, Assert(assertion))
+      gc = smartConcat(gc, Assert(assertion))
     }
     return gc
   }
 
   /* Returns "Assume(I)", ie. the Assume function applied to every assertion in I. */
   def assumeAll(I: List[Assertion]): GuardedCommand = {
-    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    var gc : GuardedCommand = null
     for (assertion <- I){
-      gc = Concat(gc, Assume(assertion))
+      gc = smartConcat(gc, Assume(assertion))
     }
     return gc
   }
@@ -265,8 +276,8 @@ object VCGen {
     // GC(x := e) = assume tmp = x; havoc x; assume (x = e[tmp/x]);
     var x = statement.x
     var e = statement.value
-    var tmp = null
-    return Concat(Assume(ACmp((tmp, "=", Var(x)))), 
+    var tmp = x + "tmp"
+    return Concat(Assume(ACmp((Var(tmp), "=", Var(x)))), 
           Concat(Havoc(x), Assume(ACmp((Var(x), "=", replace(e, x, tmp))))))
   }
 
@@ -276,8 +287,8 @@ object VCGen {
     var a = statement.x
     var i = statement.ind
     var v = statement.value
-    var tmp = null
-    return Concat(Assume(ACmp((tmp, "=", Var(a)))), Concat(Havoc(a), 
+    var tmp = a + "tmp"
+    return Concat(Assume(ACmp((Var(tmp), "=", Var(a)))), Concat(Havoc(a), 
       Assume(ACmp((Var(a), "=", AWrite(tmp, i, v))))))
   }
 
@@ -289,10 +300,10 @@ object VCGen {
     var x2 = statement.x2
     var e1 = statement.value1
     var e2 = statement.value2
-    var tmp1 = null
-    var tmp2 = null
-    return Concat(Assume(ACmp((tmp1, "=", Var(x1)))), 
-          Concat(Assume(ACmp((tmp2, "=", Var(x2)))), Concat(Havoc(x1), Concat(Havoc(x2),
+    var tmp1 = x1 + "tmp"
+    var tmp2 = x2 + "tmp"
+    return Concat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
+          Concat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), Concat(Havoc(x1), Concat(Havoc(x2),
           Concat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
           Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2)))))))))
   }
@@ -317,25 +328,25 @@ object VCGen {
     var havocs = havocVars(c)
     var assertions = assertAll(I)
     var assumptions = assumeAll(I)
-    return Concat(assertions, Concat(havocs, Concat(assumptions, 
+    return smartConcat(assertions, smartConcat(havocs, smartConcat(assumptions, 
           Rect(Concat(BAssume(b), Concat(GC(c), 
           assertions)), BAssume(BNot(b))))))
   }
 
   /* Translates each statement in the block into a loop-free guarded command. */
   def GC(block: Block): GuardedCommand = {
-    var gc : GuardedCommand = Assume(ACmp((Num(1), "=", Num(1)))) // assume true
+    var gc : GuardedCommand = null
     for (statement <- block) {
       if (statement.isInstanceOf[Assign]) {
-        gc = Concat(gc, GCAssign(statement.asInstanceOf[Assign]))
+        gc = smartConcat(gc, GCAssign(statement.asInstanceOf[Assign]))
       } else if (statement.isInstanceOf[Write]) {
-        gc = Concat(gc, GCWrite(statement.asInstanceOf[Write]))
+        gc = smartConcat(gc, GCWrite(statement.asInstanceOf[Write]))
       } else if (statement.isInstanceOf[ParAssign]) {
-        gc = Concat(gc, GCParAssign(statement.asInstanceOf[ParAssign]))
+        gc = smartConcat(gc, GCParAssign(statement.asInstanceOf[ParAssign]))
       } else if (statement.isInstanceOf[If]) {
-        gc = Concat(gc, GCIf(statement.asInstanceOf[If]))
+        gc = smartConcat(gc, GCIf(statement.asInstanceOf[If]))
       } else if (statement.isInstanceOf[While]) {
-        gc = Concat(gc, GCWhile(statement.asInstanceOf[While]))
+        gc = smartConcat(gc, GCWhile(statement.asInstanceOf[While]))
       }
     }
     return gc
@@ -345,7 +356,7 @@ object VCGen {
   def computeGC(pre: Preconditions, post: Postconditions, block: Block): GuardedCommand = {
     // want to return (programName, c_H)
     var command : GuardedCommand = GC(block)
-    command = Concat(assumeAll(pre), Concat(command, assumeAll(post)))
+    command = smartConcat(assumeAll(pre), smartConcat(command, assumeAll(post)))
     return command
   }
 
@@ -386,21 +397,23 @@ object VCGen {
     if (gC.isInstanceOf[Assume]) {
       var assume = gC.asInstanceOf[Assume]
       wp = AImplies(assume.a, b)
-    // } else if (gC.isInstanceOf[BAssume]) {
-    //   var bassume = gC.asInstanceOf[BAssume]
-    //   wp = AImplies(bassume.a, b)
+    /*} else if (gC.isInstanceOf[BAssume]) {
+       var bassume = gC.asInstanceOf[BAssume]
+       wp = AImplies(bassume.a, b)*/
     } else if (gC.isInstanceOf[Assert]) {
       var assert = gC.asInstanceOf[Assert]
       wp = AConj(assert.a, b)
     } else if (gC.isInstanceOf[Havoc]) {
       var havoc = gC.asInstanceOf[Havoc]
-      wp = replaceAssertion(b, havoc.x, null) //tmp == null???
+      wp = replaceAssertion(b, havoc.x, havoc.x + "frsh") //tmp == null???
     } else if (gC.isInstanceOf[Concat]) {
       var concat = gC.asInstanceOf[Concat]
       wp = WP(concat.c1, WP(concat.c2, b))
-    } else {
+    } else if (gC.isInstanceOf[Rect]){
       var rect = gC.asInstanceOf[Rect]
       wp = AConj(WP(rect.c1, b), WP(rect.c2, b))
+    } else { // gC is null
+      return null
     }
     return wp
   }
@@ -409,6 +422,55 @@ object VCGen {
     var verificationCondition = WP(gC, b)
     return verificationCondition
   }
+
+  /*/* Declare all vars seen in the program. */
+  def declareVars(vars: Array): String = {
+    var declartion : String = ""
+    for (v <- vars){
+       declaration += "\n(declare-fun" + v + "() Int )" // always int?? idk.
+    }
+    return declaration
+  }
+
+  /* Translates a single statement into SMT. */
+  def SMThelper(vc: Assertion, vars: Array): String = {
+    // Q: 1) do we have to support functions
+    if (statement is num){
+      return num
+    } else if (statement is var){
+      if (var not in vars){
+        vars += [var]
+      }
+      return var
+    } else if (statement is comparison) {
+      return "\n(" + operator + SMThelper(left) + SMThelper(right) + ")"
+    } else if (statement is not){
+      // what to do idk
+    } else if (statement is or){
+      return "\n(or " + SMThelper(left) + SMThelper(right) + ")"
+    } else if (statement is and){
+      return "\n(and " + SMThelper(left) + SMThelper(right) + ")"
+    } else if (statement is implies){
+      return "\n(implies " + SMThelper(left) + SMThelper(right) + ")"
+    } else if (statement is forall){
+      return "\n(forall " + SMThelper(var) + SMThelper(statement) + ")"
+    } else if (statement is exists){
+      return "\n(exists " + SMThelper(var) + SMThelper(statement) + ")"
+    } else {
+      return SMThelper(statement)
+    }
+  }
+
+  /* Translates verification conditions into the SMT Lib format. */
+  def vcToSMT(vc: Assertion): String = {
+    var SMTprogram : String = "(set-option : produce-models true)\n(set-logic QF_LIA)"
+    var variables : Array = []// array of seen variables
+    var body : String = ""
+    for (statement <- assertion){
+      body += SMThelper(statement, variables)
+    }
+    return SMTprogram + declareVars(variables) + body + "(check-sat)\n(get-model)"
+  }*/
 
   def main(args: Array[String]): Unit = {
     val reader = new FileReader(args(0))
@@ -422,5 +484,6 @@ object VCGen {
     println(guardedProgram)
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))))
     println(verificationConditions)
+    //var smtLibFormat = vcToSMT(verificationConditions)
   }
 }
