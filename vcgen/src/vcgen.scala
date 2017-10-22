@@ -362,6 +362,7 @@ object VCGen {
 
   def replaceAssertion(assert: Assertion, x: String, tmp: String): Assertion = {
     if (assert.isInstanceOf[ACmp]) {
+<<<<<<< HEAD
       var acassert = assert.asInstanceOf[ACmp]
       return ACmp(replace(acassert.cmp._1, x, tmp), acassert.cmp._2, 
         replace(acassert.cmp._3, x, tmp))
@@ -421,6 +422,84 @@ object VCGen {
   def genVC(gC: GuardedCommand, b: Assertion): Assertion = {
     var verificationCondition = WP(gC, b)
     return verificationCondition
+=======
+      var cassert = assert.asInstanceOf[ACmp]
+      return ACmp(replace(cassert.cmp._1, x, tmp), cassert.cmp._2, 
+        replace(cassert.cmp._3, x, tmp))
+    } else if (assert.isInstanceOf[ANot]) {
+      var nassert = assert.asInstanceOf[ANot]
+      return ANot(replaceAssertion(nassert.a, x, tmp))
+    } else if (assert.isInstanceOf[ADisj]) {
+      var dassert = assert.asInstanceOf[ADisj]
+      return ADisj(replaceAssertion(dassert.left, x, tmp), 
+        replaceAssertion(dassert.right, x, tmp))
+    } else if (assert.isInstanceOf[AConj]) {
+      var coassert = assert.asInstanceOf[AConj]
+      return AConj(replaceAssertion(coassert.left, x, tmp),
+        replaceAssertion(coassert.right, x, tmp))
+    } else if (assert.isInstanceOf[AImplies]) {
+      var iassert = assert.asInstanceOf[AImplies]
+      return AImplies(replaceAssertion(iassert.left, x, tmp),
+        replaceAssertion(iassert.right, x, tmp))
+    } else if (assert.isInstanceOf[AForall]) {
+      var fassert = assert.asInstanceOf[AForall]
+      return AForall(fassert.x, replaceAssertion(fassert.a, x, tmp))
+    } else if (assert.isInstanceOf[AExists]) {
+      var eassert = assert.asInstanceOf[AExists]
+      return AExists(eassert.x, replaceAssertion(eassert.a, x, tmp))
+    } else if (assert.isInstanceOf[AParens]) {
+      var passert = assert.asInstanceOf[AParens]
+      return AParens(replaceAssertion(passert.a, x, tmp))
+    } else {
+      return null
+    }
+  }
+
+  def boolToAssn(be: BoolExp): Assertion = {
+    if (be.isInstanceOf[BCmp]) {
+      var bc = be.asInstanceOf[BCmp]
+      return ACmp(bc.cmp._1, bc.cmp._2, bc.cmp._3)
+    } else if (be.isInstanceOf[BNot]) {
+      var bn = be.asInstanceOf[BNot]
+      return ANot(boolToAssn(bn.b))
+    } else if (be.isInstanceOf[BDisj]) {
+      var bd = be.asInstanceOf[BDisj]
+      return ADisj(boolToAssn(bd.left), boolToAssn(bd.right))
+    } else if (be.isInstanceOf[BConj]) {
+      var bco = be.asInstanceOf[BConj]
+      return AConj(boolToAssn(bco.left), boolToAssn(bco.right))
+    } else {
+      var bp = be.asInstanceOf[BParens]
+      return AParens(boolToAssn(bp.b))
+    }
+  }
+
+  /* Translates the guarded program into a verification condition */
+  def genVC(gC: GuardedCommand, b: Assertion): Assertion = {
+    var wp : Assertion = null 
+    if (gC.isInstanceOf[Assume]) {
+      var assume = gC.asInstanceOf[Assume]
+      return AImplies(assume.a, b)
+    } else if (gC.isInstanceOf[BAssume]) {
+      var bassume = gC.asInstanceOf[BAssume]
+      var assnexp = boolToAssn(bassume.a)
+      return AImplies(assnexp, b)
+    } else if (gC.isInstanceOf[Assert]) {
+      var assert = gC.asInstanceOf[Assert]
+      return AConj(assert.a, b)
+    } else if (gC.isInstanceOf[Havoc]) {
+      var havoc = gC.asInstanceOf[Havoc]
+      return replaceAssertion(b, havoc.x, havoc.x + "frsh") //tmp == null???
+    } else if (gC.isInstanceOf[Concat]) {
+      var concat = gC.asInstanceOf[Concat]
+      return genVC(concat.c1, genVC(concat.c2, b))
+    } else if (gC.isInstanceOf[Rect]){
+      var rect = gC.asInstanceOf[Rect]
+      return AConj(genVC(rect.c1, b), genVC(rect.c2, b))
+    } else { // gC is null
+      return null
+    }
+>>>>>>> kate
   }
 
   /*/* Declare all vars seen in the program. */
@@ -431,7 +510,10 @@ object VCGen {
     }
     return declaration
   }
+<<<<<<< HEAD
 
+=======
+>>>>>>> kate
   /* Translates a single statement into SMT. */
   def SMThelper(vc: Assertion, vars: Array): String = {
     // Q: 1) do we have to support functions
@@ -460,7 +542,10 @@ object VCGen {
       return SMThelper(statement)
     }
   }
+<<<<<<< HEAD
 
+=======
+>>>>>>> kate
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion): String = {
     var SMTprogram : String = "(set-option : produce-models true)\n(set-logic QF_LIA)"
