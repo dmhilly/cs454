@@ -345,7 +345,7 @@ object VCGen {
     var assumptions = assumeAll(I)
     var result = GC(c, vars)
     return (smartConcat(assertions, smartConcat(havocs, smartConcat(assumptions, 
-          Rect(Concat(BAssume(b), Concat(result._1, 
+          Rect(Concat(BAssume(b), smartConcat(result._1, 
           assertions)), BAssume(BNot(b)))))), result._2)
   }
 
@@ -574,10 +574,13 @@ object VCGen {
     var SMTprogram : String = "(set-option :produce-models true)\n(set-logic QF_LIA)\n"
     var variables : ArrayBuffer[String] = ArrayBuffer[String]()// array of seen variables
     var body = SMThelper(vc, variables)
-    var val1 = body._1
-    var val2 = body._2
-    if (val1 == null) {
+    var val1 : String = "" //= body._1
+    var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
+    if (body == null) {
       val1 = "true";
+    } else {
+      val1 = body._1
+      val2 = body._2
     }
     return SMTprogram + declareVars(val2.toArray) + 
     "(assert " + val1 + ")" + "\n(check-sat)\n(get-model)"
@@ -587,15 +590,19 @@ object VCGen {
     val reader = new FileReader(args(0))
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
-    // println(parsedProgram)
+    println("PARSED:")
+    println(parsedProgram)
     val preconditions = parsedProgram.get._2
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
-    // println(guardedProgram)
+    println("GUARDED COMMANDS:")
+    println(guardedProgram)
     // What to do to start with TRUE ????????
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), scala.collection.mutable.Map[String, Int]())
-    // println(verificationConditions)
+    println("VERIFICATION CONDITION:")
+    println(verificationConditions)
+    println("SMT LIB:")
     var smtLibFormat = vcToSMT(verificationConditions._1)
     println(smtLibFormat)
   }
