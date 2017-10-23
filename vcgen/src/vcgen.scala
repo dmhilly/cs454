@@ -2,10 +2,9 @@ import scala.util.parsing.combinator._
 import java.io.FileReader
 import scala.collection.mutable.ArrayBuffer
 
-// TODO:
-// 1. parser written but faulty (find.imp not working for example)
-// 2. Add the extra things from Bill’s list
-// 3. what to name temporary variables
+// TODO: right now all the imp examples that were given to us generate something except find
+// (parser issue). need to fix this problem. also, were just returning "sat"
+// and an empty model for empty, which is wrong.
 
 object VCGen {
 
@@ -264,9 +263,12 @@ object VCGen {
       } else if (e.isInstanceOf[Mod]) {
         var me = e.asInstanceOf[Mod]
         return Mod(replace(me.left, x, tmp), replace(me.right, x, tmp))
-      } else { // Parens
+      } else if (e.isInstanceOf[Parens]){ 
         var pe = e.asInstanceOf[Parens]
         return Parens(replace(pe.a, x, tmp))
+      } else{ // AWrite
+        var we = e.asInstanceOf[AWrite]
+        return AWrite(we.a, replace(we.i, x, tmp), replace(we.v, x, tmp))
       }
     }
   }
@@ -419,7 +421,7 @@ object VCGen {
     } else if (assert.isInstanceOf[AParens]) {
       var passert = assert.asInstanceOf[AParens]
       return AParens(replaceAssertion(passert.a, x, tmp))
-    } else {
+    } else{
       return null
     }
   }
@@ -493,9 +495,10 @@ object VCGen {
         vars += v.name
       }
       return (v.name, vars)
-    // } else if (vc.isInstanceOf[Read]) {
-    //   var re = vc.asInstanceOf[Read]
-    //   return "\n(+" + SMTAhelper(ae.left, vars) + SMTAhelper(ae.right, vars) + ")"
+    } else if (vc.isInstanceOf[Read]) {
+      var re = vc.asInstanceOf[Read]
+      var index = SMTAhelper(re.ind, vars)
+      return ("\n(select " + re.name + " " + index._1 + ")", index._2)
     } else if (vc.isInstanceOf[Add]) {
       var ae = vc.asInstanceOf[Add]
       var val1 = SMTAhelper(ae.left, vars)
@@ -521,9 +524,14 @@ object VCGen {
       var val1 = SMTAhelper(me.left, vars)
       var val2 = SMTAhelper(me.right, val1._2)
       return ("(mod " + val1._1 + " " + val2._1 +")", val2._2)
-    } else { // Parens
+    } else if (vc.isInstanceOf[Parens]) {
       var pe = vc.asInstanceOf[Parens]
       return SMTAhelper(pe.a, vars)
+    } else{ // AWrite
+      var we = vc.asInstanceOf[AWrite]
+      var value = SMTAhelper(we.v, vars)
+      var index = SMTAhelper(we.i, value._2)
+      return ("(= (store " + we.a + " " + value._1 + " " + index._1 + ")", index._2)
     }
   }
 
