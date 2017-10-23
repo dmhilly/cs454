@@ -1,11 +1,11 @@
 import scala.util.parsing.combinator._
 import java.io.FileReader
+import scala.collection.mutable.ArrayBuffer
 
 // TODO:
 // 1. parser written but faulty (find.imp not working for example)
 // 2. Add the extra things from Bill’s list
-// 3. create a print function that turns our command into SMT LIB forma
-// 4. what to name temporary variables
+// 3. what to name temporary variables
 
 object VCGen {
 
@@ -440,44 +440,53 @@ object VCGen {
     }
   }
 
-  // /* Declare all vars seen in the program. */
-  // def declareVars(vars: Array[String]): String = {
-  //   var declaration : String = ""
-  //   for (v <- vars){
-  //      declaration += "\n(declare-fun" + v + "() Int )" // always int?? idk.
-  //   }
-  //   return declaration
-  // }
+  /* Declare all vars seen in the program. */
+  def declareVars(vars: Array[String]): String = {
+    var declaration : String = ""
+    for (v <- vars){
+       declaration += "(declare-fun " + v + "() Int)\n" // always int?? idk.
+    }
+    return declaration
+  }
 
-  def SMTAhelper(vc: ArithExp, vars: Array[String]): String = {
+  def SMTAhelper(vc: ArithExp, vars: ArrayBuffer[String]): (String, ArrayBuffer[String]) = {
     if (vc.isInstanceOf[Num]){
       var num = vc.asInstanceOf[Num]
-      return num.value.toString
+      return (num.value.toString, vars)
     } else if (vc.isInstanceOf[Var]) {
       var v = vc.asInstanceOf[Var]
       if (vars.find(_ == v.name) == None){
-        vars :+ v.name
-        println("(declare-fun " + v.name + "() Int )")
+        vars += v.name
       }
-      return v.name
+      return (v.name, vars)
     // } else if (vc.isInstanceOf[Read]) {
     //   var re = vc.asInstanceOf[Read]
     //   return "\n(+" + SMTAhelper(ae.left, vars) + SMTAhelper(ae.right, vars) + ")"
     } else if (vc.isInstanceOf[Add]) {
       var ae = vc.asInstanceOf[Add]
-      return "(+" + SMTAhelper(ae.left, vars) + SMTAhelper(ae.right, vars) + ")"
+      var val1 = SMTAhelper(ae.left, vars)
+      var val2 = SMTAhelper(ae.right, val1._2)
+      return ("(+ " + val1._1 + " " + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[Sub]) {
       var se = vc.asInstanceOf[Sub]
-      return "(-" + SMTAhelper(se.left, vars) + SMTAhelper(se.right, vars) + ")"
+      var val1 = SMTAhelper(se.left, vars)
+      var val2 = SMTAhelper(se.right, val1._2)
+      return ("(- " + val1._1 + " " + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[Mul]) {
       var me = vc.asInstanceOf[Mul]
-      return "(*" + SMTAhelper(me.left, vars) + SMTAhelper(me.right, vars) + ")"
+      var val1 = SMTAhelper(me.left, vars)
+      var val2 = SMTAhelper(me.right, val1._2)
+      return ("(* " + val1._1 + " " + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[Div]) {
       var de = vc.asInstanceOf[Div]
-      return "(div" + SMTAhelper(de.left, vars) + SMTAhelper(de.right, vars) + ")"
+      var val1 = SMTAhelper(de.left, vars)
+      var val2 = SMTAhelper(de.right, val1._2)
+      return ("(div " + val1._1 + " " + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[Mod]) {
       var me = vc.asInstanceOf[Mod]
-      return "(mod" + SMTAhelper(me.left, vars) + SMTAhelper(me.right, vars) + ")"
+      var val1 = SMTAhelper(me.left, vars)
+      var val2 = SMTAhelper(me.right, val1._2)
+      return ("(mod " + val1._1 + " " + val2._1 +")", val2._2)
     } else { // Parens
       var pe = vc.asInstanceOf[Parens]
       return SMTAhelper(pe.a, vars)
@@ -485,57 +494,74 @@ object VCGen {
   }
 
   /* Translates a single statement into SMT. */
-  def SMThelper(vc: Assertion, vars: Array[String]): String = {
+  def SMThelper(vc: Assertion, vars: ArrayBuffer[String]): (String, ArrayBuffer[String]) = {
     // Q: 1) do we have to support functions
     if (vc.isInstanceOf[ACmp]) {
       var ac = vc.asInstanceOf[ACmp]
-      return "(" + ac.cmp._2 + " " + SMTAhelper(ac.cmp._1, 
-        vars) + " " + SMTAhelper(ac.cmp._3, vars) + ")"
+      var val1 = SMTAhelper(ac.cmp._1, vars)
+      var val2 = SMTAhelper(ac.cmp._3, val1._2) 
+      return ("(" + ac.cmp._2 + " " + val1._1 + " " + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[ANot]){
       var an = vc.asInstanceOf[ANot]
-      return "(not" + SMThelper(an.a, vars) + ")"
+      var val1 = SMThelper(an.a, vars) 
+      return ("(not" + val1._1 + ")", vars)
     } else if (vc.isInstanceOf[ADisj]){
       var ad = vc.asInstanceOf[ADisj]
-      return "(or " + SMThelper(ad.left, vars) + SMThelper(ad.right, vars) + ")"
+      var val1 = SMThelper(ad.left, vars) 
+      var val2 = SMThelper(ad.right, val1._2)
+      return ("(or " + val1._1 + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[AConj]){
       var aco = vc.asInstanceOf[AConj]
-      return "(and " + SMThelper(aco.left, vars) + SMThelper(aco.right, vars) + ")"
+      var val1 = SMThelper(aco.left, vars) 
+      var val2 = SMThelper(aco.right, val1._2)
+      return ("(and " + val1._1  + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[AImplies]){
       var ai = vc.asInstanceOf[AImplies]
-      return "(=> " + SMThelper(ai.left, vars) + SMThelper(ai.right, vars) + ")"
+      var val1 = SMThelper(ai.left, vars)
+      var val2 = SMThelper(ai.right, val1._2)
+      return ("(=> " + val1._1 + val2._1 + ")", val2._2)
     } else if (vc.isInstanceOf[AForall]){
       var af = vc.asInstanceOf[AForall]
-      return "(forall (" + af.x + " Int)" + SMThelper(af.a, vars) + ")"
+      var val1 = SMThelper(af.a, vars)
+      return ("(forall (" + af.x + " Int)" + val1._1 + ")", val1._2)
     } else if (vc.isInstanceOf[AExists]){
       var ae = vc.asInstanceOf[AExists]
-      return "(exists (" + ae.x + " Int)" + SMThelper(ae.a, vars) + ")"
-    } else {
+      var val1 = SMThelper(ae.a, vars)
+      return ("(exists (" + ae.x + " Int)" + val1._1 + ")", val1._2)
+    } else if (vc.isInstanceOf[AParens]){
       var ap = vc.asInstanceOf[AParens]
       return SMThelper(ap.a, vars)
+    } else {
+      return null
     }
   }
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion): String = {
-    // var SMTprogram : String = "(set-option :produce-models true)\n(set-logic QF_LIA)\n"
-    println("(set-option :produce-models true)\n(set-logic QF_LIA)")
-    var variables : Array[String] = Array[String]()// array of seen variables
-    var body : String = SMThelper(vc, variables)
-    return "(assert " + body + ")" + "\n(check-sat)\n(get-model)"
+    var SMTprogram : String = "(set-option :produce-models true)\n(set-logic QF_LIA)\n"
+    var variables : ArrayBuffer[String] = ArrayBuffer[String]()// array of seen variables
+    var body = SMThelper(vc, variables)
+    var val1 = body._1
+    var val2 = body._2
+    if (val1 == null) {
+      val1 = "true";
+    }
+    return SMTprogram + declareVars(val2.toArray) + 
+    "(assert " + val1 + ")" + "\n(check-sat)\n(get-model)"
   }
 
   def main(args: Array[String]): Unit = {
     val reader = new FileReader(args(0))
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
-    println(parsedProgram)
+    // println(parsedProgram)
     val preconditions = parsedProgram.get._2
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
-    println(guardedProgram)
+    // println(guardedProgram)
     // What to do to start with TRUE ????????
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))))
-    println(verificationConditions)
+    // println(verificationConditions)
     var smtLibFormat = vcToSMT(verificationConditions)
     println(smtLibFormat)
   }
