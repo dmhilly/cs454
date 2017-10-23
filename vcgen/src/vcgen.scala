@@ -271,55 +271,70 @@ object VCGen {
     }
   }
 
+  def updateMap(x: String, map: scala.collection.mutable.Map[String, Int]): scala.collection.mutable.Map[String, Int] = {
+    if (map.contains(x)) {
+      map(x) += 1
+    } else {
+      map += (x -> 1)
+    }
+    return map
+  }
+
   /* Translate an Assign statement into guarded commands. */
-  def GCAssign(statement: Assign): GuardedCommand = {
+  def GCAssign(statement: Assign, vars: scala.collection.mutable.Map[String, Int]): (GuardedCommand, scala.collection.mutable.Map[String, Int]) = {
     // GC(x := e) = assume tmp = x; havoc x; assume (x = e[tmp/x]);
     var x = statement.x
     var e = statement.value
-    var tmp = x + "tmp"
-    return Concat(Assume(ACmp((Var(tmp), "=", Var(x)))), 
-          Concat(Havoc(x), Assume(ACmp((Var(x), "=", replace(e, x, tmp))))))
+    var newVars = updateMap(x, vars)
+    var tmp = x + "tmp" + newVars(x)
+    return (Concat(Assume(ACmp((Var(tmp), "=", Var(x)))), 
+          Concat(Havoc(x), Assume(ACmp((Var(x), "=", replace(e, x, tmp)))))), newVars)
   }
 
   /* Translate a Write statement into guarded commands. */
-  def GCWrite(statement: Write): GuardedCommand = {
+  def GCWrite(statement: Write, vars: scala.collection.mutable.Map[String, Int]): (GuardedCommand, scala.collection.mutable.Map[String, Int]) = {
     // GC(a[i] := v) = assume tmp = a; havoc a; assume (a = write(tmp, i, v))
     var a = statement.x
     var i = statement.ind
     var v = statement.value
-    var tmp = a + "tmp"
-    return Concat(Assume(ACmp((Var(tmp), "=", Var(a)))), Concat(Havoc(a), 
-      Assume(ACmp((Var(a), "=", AWrite(tmp, i, v))))))
+    var newVars = updateMap(a, vars)
+    var tmp = a + "tmp" + newVars(a)
+    return (Concat(Assume(ACmp((Var(tmp), "=", Var(a)))), Concat(Havoc(a), 
+      Assume(ACmp((Var(a), "=", AWrite(tmp, i, v)))))), newVars)
   }
 
   /* Translate a ParAssign statement into guarded commands. */
-  def GCParAssign(statement: ParAssign): GuardedCommand = {
+  def GCParAssign(statement: ParAssign, vars: scala.collection.mutable.Map[String, Int]): (GuardedCommand, scala.collection.mutable.Map[String, Int]) = {
     // GC(x1, x2 := e1, e2) = assume tmp1 = x1; assume tmp2 = x2; havoc x1; havoc x2;
     // assume (x1 = e1[tmp1/x1]); assume (x2 = e2[tmp2/x2]);
     var x1 = statement.x1
     var x2 = statement.x2
     var e1 = statement.value1
     var e2 = statement.value2
-    var tmp1 = x1 + "tmp"
-    var tmp2 = x2 + "tmp"
-    return Concat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
+    var newVars = updateMap(x1, vars)
+    newVars = updateMap(x2, newVars)
+    var tmp1 = x1 + "tmp" + newVars(x1)
+    var tmp2 = x2 + "tmp" + newVars(x2)
+    return (Concat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
           Concat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), Concat(Havoc(x1), Concat(Havoc(x2),
           Concat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
-          Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2)))))))))
+          Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2))))))))), newVars)
   }
 
   /* Translate an If statement into guarded commands. */
-  def GCIf(statement: If): GuardedCommand = {
+  def GCIf(statement: If, vars: scala.collection.mutable.Map[String, Int]): (GuardedCommand, scala.collection.mutable.Map[String, Int]) = {
     // GC(if b then c1 else c2) = (assume b; GC(c1)) [] (assume !b; GC(c2))
     var b = statement.cond
     var c1 = statement.th
     var c2 = statement.el
-    return Rect(Concat(BAssume(b), GC(c1)), 
-      Concat(BAssume(BNot(b)), GC(c2)))
+    var c1result = GC(c1, vars)
+    var c2result = GC(c2, c1result._2)
+    return (Rect(Concat(BAssume(b), c1result._1), 
+      Concat(BAssume(BNot(b)), c2result._1)), c2result._2)
   }
 
   /* Translate a While statement into guarded commands. */
-  def GCWhile(statement: While): GuardedCommand = {
+  def GCWhile(statement: While, vars: scala.collection.mutable.Map[String, Int]): (GuardedCommand, scala.collection.mutable.Map[String, Int]) = {
     // GC({I} while b do c) = assert I; havoc x1; ...; havoc xn; assume I;
     // (assume b; GC(c); assert I; assume false) [] assume !b
     var I = statement.inv
@@ -328,35 +343,50 @@ object VCGen {
     var havocs = havocVars(c)
     var assertions = assertAll(I)
     var assumptions = assumeAll(I)
-    return smartConcat(assertions, smartConcat(havocs, smartConcat(assumptions, 
-          Rect(Concat(BAssume(b), Concat(GC(c), 
-          assertions)), BAssume(BNot(b))))))
+    var result = GC(c, vars)
+    return (smartConcat(assertions, smartConcat(havocs, smartConcat(assumptions, 
+          Rect(Concat(BAssume(b), Concat(result._1, 
+          assertions)), BAssume(BNot(b)))))), result._2)
   }
 
   /* Translates each statement in the block into a loop-free guarded command. */
-  def GC(block: Block): GuardedCommand = {
+  def GC(block: Block, passedVars: scala.collection.mutable.Map[String, Int]): (GuardedCommand, scala.collection.mutable.Map[String, Int]) = {
     var gc : GuardedCommand = null
+    var vars = scala.collection.mutable.Map[String, Int]()
+    if (passedVars != null){
+      vars = passedVars
+    }
     for (statement <- block) {
       if (statement.isInstanceOf[Assign]) {
-        gc = smartConcat(gc, GCAssign(statement.asInstanceOf[Assign]))
+        var result = GCAssign(statement.asInstanceOf[Assign], vars)
+        gc = smartConcat(gc, result._1)
+        vars = result._2
       } else if (statement.isInstanceOf[Write]) {
-        gc = smartConcat(gc, GCWrite(statement.asInstanceOf[Write]))
+        var result = GCWrite(statement.asInstanceOf[Write], vars)
+        gc = smartConcat(gc, result._1)
+        vars = result._2
       } else if (statement.isInstanceOf[ParAssign]) {
-        gc = smartConcat(gc, GCParAssign(statement.asInstanceOf[ParAssign]))
+        var result = GCParAssign(statement.asInstanceOf[ParAssign], vars)
+        gc = smartConcat(gc, result._1)
+        vars = result._2
       } else if (statement.isInstanceOf[If]) {
-        gc = smartConcat(gc, GCIf(statement.asInstanceOf[If]))
+        var result = GCIf(statement.asInstanceOf[If], vars)
+        gc = smartConcat(gc, result._1)
+        vars = result._2
       } else if (statement.isInstanceOf[While]) {
-        gc = smartConcat(gc, GCWhile(statement.asInstanceOf[While]))
+        var result = GCWhile(statement.asInstanceOf[While], vars)
+        gc = smartConcat(gc, result._1)
+        vars = result._2
       }
     }
-    return gc
+    return (gc, vars)
   }
 
   /* Returns the program in loop-free guarded commands. */
   def computeGC(pre: Preconditions, post: Postconditions, block: Block): GuardedCommand = {
     // want to return (programName, c_H)
-    var command : GuardedCommand = GC(block)
-    command = smartConcat(assumeAll(pre), smartConcat(command, assumeAll(post)))
+    var result = GC(block, null)
+    var command = smartConcat(assumeAll(pre), smartConcat(result._1, assumeAll(post)))
     return command
   }
 
