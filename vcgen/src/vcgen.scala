@@ -362,67 +362,6 @@ object VCGen {
 
   def replaceAssertion(assert: Assertion, x: String, tmp: String): Assertion = {
     if (assert.isInstanceOf[ACmp]) {
-<<<<<<< HEAD
-      var acassert = assert.asInstanceOf[ACmp]
-      return ACmp(replace(acassert.cmp._1, x, tmp), acassert.cmp._2, 
-        replace(acassert.cmp._3, x, tmp))
-    } else if (assert.isInstanceOf[ANot]) {
-      var anassert = assert.asInstanceOf[ANot]
-      return ANot(replaceAssertion(anassert.a, x, tmp))
-    } else if (assert.isInstanceOf[ADisj]) {
-      var adassert = assert.asInstanceOf[ADisj]
-      return ADisj(replaceAssertion(adassert.left, x, tmp), 
-        replaceAssertion(adassert.right, x, tmp))
-    } else if (assert.isInstanceOf[AConj]) {
-      var acoassert = assert.asInstanceOf[AConj]
-      return AConj(replaceAssertion(acoassert.left, x, tmp),
-        replaceAssertion(acoassert.right, x, tmp))
-    } else if (assert.isInstanceOf[AImplies]) {
-      var aiassert = assert.asInstanceOf[AImplies]
-      return AImplies(replaceAssertion(aiassert.left, x, tmp),
-        replaceAssertion(aiassert.right, x, tmp))
-    } else if (assert.isInstanceOf[AForall]) {
-      var afassert = assert.asInstanceOf[AForall]
-      return AForall(afassert.x, replaceAssertion(afassert.a, x, tmp))
-    } else if (assert.isInstanceOf[AExists]) {
-      var aeassert = assert.asInstanceOf[AExists]
-      return AExists(aeassert.x, replaceAssertion(aeassert.a, x, tmp))
-    } else {
-      var apassert = assert.asInstanceOf[AParens]
-      return AParens(replaceAssertion(apassert.a, x, tmp))
-    }
-  }
-
-  def WP(gC: GuardedCommand, b: Assertion): Assertion = {
-    var wp : Assertion = ACmp((Num(1), "=", Num(1)))
-    if (gC.isInstanceOf[Assume]) {
-      var assume = gC.asInstanceOf[Assume]
-      wp = AImplies(assume.a, b)
-    /*} else if (gC.isInstanceOf[BAssume]) {
-       var bassume = gC.asInstanceOf[BAssume]
-       wp = AImplies(bassume.a, b)*/
-    } else if (gC.isInstanceOf[Assert]) {
-      var assert = gC.asInstanceOf[Assert]
-      wp = AConj(assert.a, b)
-    } else if (gC.isInstanceOf[Havoc]) {
-      var havoc = gC.asInstanceOf[Havoc]
-      wp = replaceAssertion(b, havoc.x, havoc.x + "frsh") //tmp == null???
-    } else if (gC.isInstanceOf[Concat]) {
-      var concat = gC.asInstanceOf[Concat]
-      wp = WP(concat.c1, WP(concat.c2, b))
-    } else if (gC.isInstanceOf[Rect]){
-      var rect = gC.asInstanceOf[Rect]
-      wp = AConj(WP(rect.c1, b), WP(rect.c2, b))
-    } else { // gC is null
-      return null
-    }
-    return wp
-  }
-
-  def genVC(gC: GuardedCommand, b: Assertion): Assertion = {
-    var verificationCondition = WP(gC, b)
-    return verificationCondition
-=======
       var cassert = assert.asInstanceOf[ACmp]
       return ACmp(replace(cassert.cmp._1, x, tmp), cassert.cmp._2, 
         replace(cassert.cmp._3, x, tmp))
@@ -476,7 +415,7 @@ object VCGen {
 
   /* Translates the guarded program into a verification condition */
   def genVC(gC: GuardedCommand, b: Assertion): Assertion = {
-    var wp : Assertion = null 
+    var wp : Assertion = null
     if (gC.isInstanceOf[Assume]) {
       var assume = gC.asInstanceOf[Assume]
       return AImplies(assume.a, b)
@@ -499,63 +438,90 @@ object VCGen {
     } else { // gC is null
       return null
     }
->>>>>>> kate
   }
 
-  /*/* Declare all vars seen in the program. */
-  def declareVars(vars: Array): String = {
-    var declartion : String = ""
-    for (v <- vars){
-       declaration += "\n(declare-fun" + v + "() Int )" // always int?? idk.
-    }
-    return declaration
-  }
-<<<<<<< HEAD
+  // /* Declare all vars seen in the program. */
+  // def declareVars(vars: Array[String]): String = {
+  //   var declaration : String = ""
+  //   for (v <- vars){
+  //      declaration += "\n(declare-fun" + v + "() Int )" // always int?? idk.
+  //   }
+  //   return declaration
+  // }
 
-=======
->>>>>>> kate
-  /* Translates a single statement into SMT. */
-  def SMThelper(vc: Assertion, vars: Array): String = {
-    // Q: 1) do we have to support functions
-    if (statement is num){
-      return num
-    } else if (statement is var){
-      if (var not in vars){
-        vars += [var]
+  def SMTAhelper(vc: ArithExp, vars: Array[String]): String = {
+    if (vc.isInstanceOf[Num]){
+      var num = vc.asInstanceOf[Num]
+      return num.value.toString
+    } else if (vc.isInstanceOf[Var]) {
+      var v = vc.asInstanceOf[Var]
+      if (vars.find(_ == v.name) == None){
+        vars :+ v.name
+        println("(declare-fun " + v.name + "() Int )")
       }
-      return var
-    } else if (statement is comparison) {
-      return "\n(" + operator + SMThelper(left) + SMThelper(right) + ")"
-    } else if (statement is not){
-      // what to do idk
-    } else if (statement is or){
-      return "\n(or " + SMThelper(left) + SMThelper(right) + ")"
-    } else if (statement is and){
-      return "\n(and " + SMThelper(left) + SMThelper(right) + ")"
-    } else if (statement is implies){
-      return "\n(implies " + SMThelper(left) + SMThelper(right) + ")"
-    } else if (statement is forall){
-      return "\n(forall " + SMThelper(var) + SMThelper(statement) + ")"
-    } else if (statement is exists){
-      return "\n(exists " + SMThelper(var) + SMThelper(statement) + ")"
-    } else {
-      return SMThelper(statement)
+      return v.name
+    // } else if (vc.isInstanceOf[Read]) {
+    //   var re = vc.asInstanceOf[Read]
+    //   return "\n(+" + SMTAhelper(ae.left, vars) + SMTAhelper(ae.right, vars) + ")"
+    } else if (vc.isInstanceOf[Add]) {
+      var ae = vc.asInstanceOf[Add]
+      return "(+" + SMTAhelper(ae.left, vars) + SMTAhelper(ae.right, vars) + ")"
+    } else if (vc.isInstanceOf[Sub]) {
+      var se = vc.asInstanceOf[Sub]
+      return "(-" + SMTAhelper(se.left, vars) + SMTAhelper(se.right, vars) + ")"
+    } else if (vc.isInstanceOf[Mul]) {
+      var me = vc.asInstanceOf[Mul]
+      return "(*" + SMTAhelper(me.left, vars) + SMTAhelper(me.right, vars) + ")"
+    } else if (vc.isInstanceOf[Div]) {
+      var de = vc.asInstanceOf[Div]
+      return "(div" + SMTAhelper(de.left, vars) + SMTAhelper(de.right, vars) + ")"
+    } else if (vc.isInstanceOf[Mod]) {
+      var me = vc.asInstanceOf[Mod]
+      return "(mod" + SMTAhelper(me.left, vars) + SMTAhelper(me.right, vars) + ")"
+    } else { // Parens
+      var pe = vc.asInstanceOf[Parens]
+      return SMTAhelper(pe.a, vars)
     }
   }
-<<<<<<< HEAD
 
-=======
->>>>>>> kate
+  /* Translates a single statement into SMT. */
+  def SMThelper(vc: Assertion, vars: Array[String]): String = {
+    // Q: 1) do we have to support functions
+    if (vc.isInstanceOf[ACmp]) {
+      var ac = vc.asInstanceOf[ACmp]
+      return "(" + ac.cmp._2 + " " + SMTAhelper(ac.cmp._1, 
+        vars) + " " + SMTAhelper(ac.cmp._3, vars) + ")"
+    } else if (vc.isInstanceOf[ANot]){
+      var an = vc.asInstanceOf[ANot]
+      return "(not" + SMThelper(an.a, vars) + ")"
+    } else if (vc.isInstanceOf[ADisj]){
+      var ad = vc.asInstanceOf[ADisj]
+      return "(or " + SMThelper(ad.left, vars) + SMThelper(ad.right, vars) + ")"
+    } else if (vc.isInstanceOf[AConj]){
+      var aco = vc.asInstanceOf[AConj]
+      return "(and " + SMThelper(aco.left, vars) + SMThelper(aco.right, vars) + ")"
+    } else if (vc.isInstanceOf[AImplies]){
+      var ai = vc.asInstanceOf[AImplies]
+      return "(=> " + SMThelper(ai.left, vars) + SMThelper(ai.right, vars) + ")"
+    } else if (vc.isInstanceOf[AForall]){
+      var af = vc.asInstanceOf[AForall]
+      return "(forall (" + af.x + " Int)" + SMThelper(af.a, vars) + ")"
+    } else if (vc.isInstanceOf[AExists]){
+      var ae = vc.asInstanceOf[AExists]
+      return "(exists (" + ae.x + " Int)" + SMThelper(ae.a, vars) + ")"
+    } else {
+      var ap = vc.asInstanceOf[AParens]
+      return SMThelper(ap.a, vars)
+    }
+  }
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion): String = {
-    var SMTprogram : String = "(set-option : produce-models true)\n(set-logic QF_LIA)"
-    var variables : Array = []// array of seen variables
-    var body : String = ""
-    for (statement <- assertion){
-      body += SMThelper(statement, variables)
-    }
-    return SMTprogram + declareVars(variables) + body + "(check-sat)\n(get-model)"
-  }*/
+    // var SMTprogram : String = "(set-option :produce-models true)\n(set-logic QF_LIA)\n"
+    println("(set-option :produce-models true)\n(set-logic QF_LIA)")
+    var variables : Array[String] = Array[String]()// array of seen variables
+    var body : String = SMThelper(vc, variables)
+    return "(assert " + body + ")" + "\n(check-sat)\n(get-model)"
+  }
 
   def main(args: Array[String]): Unit = {
     val reader = new FileReader(args(0))
@@ -567,8 +533,10 @@ object VCGen {
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
     println(guardedProgram)
+    // What to do to start with TRUE ????????
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))))
     println(verificationConditions)
-    //var smtLibFormat = vcToSMT(verificationConditions)
+    var smtLibFormat = vcToSMT(verificationConditions)
+    println(smtLibFormat)
   }
 }
