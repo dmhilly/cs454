@@ -444,29 +444,33 @@ object VCGen {
   }
 
   /* Translates the guarded program into a verification condition */
-  def genVC(gC: GuardedCommand, b: Assertion): Assertion = {
+  def genVC(gC: GuardedCommand, b: Assertion, vars: scala.collection.mutable.Map[String, Int]): (Assertion, scala.collection.mutable.Map[String, Int] )= {
     var wp : Assertion = null
     if (gC.isInstanceOf[Assume]) {
       var assume = gC.asInstanceOf[Assume]
-      return AImplies(assume.a, b)
+      return (AImplies(assume.a, b), vars)
     } else if (gC.isInstanceOf[BAssume]) {
       var bassume = gC.asInstanceOf[BAssume]
       var assnexp = boolToAssn(bassume.a)
-      return AImplies(assnexp, b)
+      return (AImplies(assnexp, b), vars)
     } else if (gC.isInstanceOf[Assert]) {
       var assert = gC.asInstanceOf[Assert]
-      return AConj(assert.a, b)
+      return (AConj(assert.a, b), vars)
     } else if (gC.isInstanceOf[Havoc]) {
       var havoc = gC.asInstanceOf[Havoc]
-      return replaceAssertion(b, havoc.x, havoc.x + "frsh") //tmp == null???
+      var newVars = updateMap(havoc.x, vars)
+      return (replaceAssertion(b, havoc.x, havoc.x + "frsh" + newVars(havoc.x)), newVars) //tmp == null???
     } else if (gC.isInstanceOf[Concat]) {
       var concat = gC.asInstanceOf[Concat]
-      return genVC(concat.c1, genVC(concat.c2, b))
+      var result2 = genVC(concat.c2, b, vars)
+      return genVC(concat.c1, result2._1, result2._2)
     } else if (gC.isInstanceOf[Rect]){
       var rect = gC.asInstanceOf[Rect]
-      return AConj(genVC(rect.c1, b), genVC(rect.c2, b))
+      var result1 = genVC(rect.c1, b, vars)
+      var result2 = genVC(rect.c2, b, result1._2)
+      return (AConj(result1._1, result2._1), result2._2)
     } else { // gC is null
-      return null
+      return (null, vars)
     }
   }
 
@@ -590,9 +594,9 @@ object VCGen {
     var guardedProgram = computeGC(preconditions, postconditions, block)
     // println(guardedProgram)
     // What to do to start with TRUE ????????
-    var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))))
+    var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), scala.collection.mutable.Map[String, Int]())
     // println(verificationConditions)
-    var smtLibFormat = vcToSMT(verificationConditions)
+    var smtLibFormat = vcToSMT(verificationConditions._1)
     println(smtLibFormat)
   }
 }
