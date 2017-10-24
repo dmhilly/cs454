@@ -58,8 +58,8 @@ object VCGen {
   case class ADisj(left: Assertion, right: Assertion) extends Assertion
   case class AConj(left: Assertion, right: Assertion) extends Assertion
   case class AImplies(left: Assertion, right: Assertion) extends Assertion
-  case class AForall(x: String, a: Assertion) extends Assertion
-  case class AExists(x: String, a: Assertion) extends Assertion
+  case class AForall(x: List[String], a: Assertion) extends Assertion
+  case class AExists(x: List[String], a: Assertion) extends Assertion
   case class AParens(a: Assertion) extends Assertion
 
   /* Complete programs. */
@@ -129,7 +129,9 @@ object VCGen {
 
     /* Parsing for Assertion. */
     def aatom: Parser[Assertion] =
-      "(" ~> assn <~ ")" | comp ^^ { ACmp(_) } | "!" ~> aatom ^^ { ANot(_) }
+      "(" ~> assn <~ ")" | comp ^^ { ACmp(_) } | "!" ~> aatom ^^ { ANot(_) } |
+      ("forall" ~> rep(pvar)) ~ ("," ~> assn) ^^ { case xlist ~ a => AForall(xlist, a) } |
+      ("exists" ~> rep(pvar)) ~ ("," ~> assn) ^^ { case xlist ~ a => AExists(xlist, a) }
     def aconj : Parser[Assertion] =
       aatom ~ rep("&&" ~> aatom) ^^ {
         case left ~ list => (left /: list) { AConj(_, _) }
@@ -143,14 +145,8 @@ object VCGen {
         case left ~ right => AImplies(left, right)
       } |
       adisj
-    def assn : Parser[Assertion] = 
-      aimpl |
-      ("forall" ~> pvar) ~ ("," ~> aimpl) ^^ {
-        case x ~ a => AForall(x, a)
-      } |
-      ("exists" ~> pvar) ~ ("," ~> aimpl) ^^ {
-        case x ~ a => AExists(x, a)
-      }
+    def assn : Parser[Assertion] = aimpl
+      
 
     /* Parsing for Statement and Block. */
     def block : Parser[Block] = rep(stmt)
@@ -498,7 +494,7 @@ object VCGen {
     } else if (vc.isInstanceOf[Read]) {
       var re = vc.asInstanceOf[Read]
       var index = SMTAhelper(re.ind, vars)
-      return ("\n(select " + re.name + " " + index._1 + ")", index._2)
+      return ("(select " + re.name + " " + index._1 + ")", index._2)
     } else if (vc.isInstanceOf[Add]) {
       var ae = vc.asInstanceOf[Add]
       var val1 = SMTAhelper(ae.left, vars)
@@ -531,7 +527,7 @@ object VCGen {
       var we = vc.asInstanceOf[AWrite]
       var value = SMTAhelper(we.v, vars)
       var index = SMTAhelper(we.i, value._2)
-      return ("(= (store " + we.a + " " + value._1 + " " + index._1 + ")", index._2)
+      return ("(= (store " + we.a + " " + value._1 + " " + index._1 + ") " + we.a + ")", index._2)
     }
   }
 
