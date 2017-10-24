@@ -3,9 +3,6 @@ import scala.collection.mutable.ArrayBuffer
 import java.io._
 import sys.process._
 
-// TODO:
-// 1. hook it up with Z3
-
 object VCGen {
 
   /* Arithmetic expressions. */
@@ -345,7 +342,7 @@ object VCGen {
     var result = GC(c, vars)
     return (smartConcat(assertions, smartConcat(havocs, smartConcat(assumptions, 
           Rect(Concat(BAssume(b), smartConcat(result._1, 
-          assertions)), BAssume(BNot(b)))))), result._2)
+          Concat(assertions, Assume(ACmp((Num(1), "=", Num(0))))))), BAssume(BNot(b)))))), result._2)
   }
 
   /* Translates each statement in the block into a loop-free guarded command. */
@@ -596,7 +593,7 @@ object VCGen {
 
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion, arrays: scala.collection.mutable.Map[String, Int]): String = {
-    var SMTprogram : String = "(set-option :produce-models true)\n(set-logic QF_LIA)\n"
+    var SMTprogram : String = "(set-option :produce-models true)\n"
     var body = SMThelper(vc, ArrayBuffer[String](), ArrayBuffer[String]())
     var val1 : String = "" //= body._1
     var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
@@ -618,13 +615,8 @@ object VCGen {
         val2 -= variable
       }
     }
-<<<<<<< HEAD
-    return SMTprogram + declareVars(val2.toArray) + declareArrays(val3.toArray) +
-    "(assert (not " + val1 + "))" + "\n(check-sat)\n(get-model)"
-=======
     return SMTprogram + declareVars(val2.toSet.toArray) + declareArrays(val3.toSet.toArray) +
-    "(assert " + val1 + ")" + "\n(check-sat)\n(get-model)"
->>>>>>> 34929228fd8d4ab3952309d27c718dabebaf687c
+    "(assert (not " + val1 + "))" + "\n(check-sat)\n(get-model)"
   }
 
   def main(args: Array[String]): Unit = {
@@ -655,6 +647,6 @@ object VCGen {
     bw.write(smtLibFormat)
     bw.close()
     // call z3
-    val process = Process("z3 -smt2 smt.txt").lines
+    // val process = Process("z3 -smt2 smt.txt").lines
   }
 }
