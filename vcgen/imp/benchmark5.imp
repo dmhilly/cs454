@@ -1,0 +1,5 @@
+program benchmark5
+  post n = 0
+is
+  n := 0;
+end
