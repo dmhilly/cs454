@@ -346,7 +346,7 @@ object VCGen {
     var result = GC(c, vars)
     return (smartConcat(assertions, smartConcat(havocs, smartConcat(assumptions, 
           Rect(Concat(BAssume(b), smartConcat(result._1, 
-          Concat(assertions, Assume(ACmp((Num(1), "=", Num(0))))))), BAssume(BNot(b)))))), result._2)
+          smartConcat(assertions, Assume(ACmp((Num(1), "=", Num(0))))))), BAssume(BNot(b)))))), result._2)
   }
 
   /* Translates each statement in the block into a loop-free guarded command. */
@@ -458,7 +458,6 @@ object VCGen {
       var assert = gC.asInstanceOf[Assert]
       return (AConj(assert.a, b), vars, arrays)
     } else if (gC.isInstanceOf[Havoc]) {
-      println("here")
       var havoc = gC.asInstanceOf[Havoc]
       var newVars = updateMap(havoc.x, vars)
       return (replaceAssertion(b, havoc.x, havoc.x + "frsh" + newVars(havoc.x)), newVars, arrays) //tmp == null???
@@ -549,7 +548,7 @@ object VCGen {
       var value = SMTAhelper(we.v, vars, arrays)
       var index = SMTAhelper(we.i, value._2, value._3)
       arrays += we.a
-      return ("(= (store " + we.a + " " + value._1 + " " + index._1 + ") " + we.a + ")", index._2, arrays)
+      return ("(store " + we.a + " " + value._1 + " " + index._1 + ")", index._2, arrays)
     }
   }
 
