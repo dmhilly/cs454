@@ -390,6 +390,7 @@ object VCGen {
     return command
   }
 
+  /* Replace assertions with a fresh variable */
   def replaceAssertion(assert: Assertion, x: String, tmp: String): Assertion = {
     if (assert.isInstanceOf[ACmp]) {
       var cassert = assert.asInstanceOf[ACmp]
@@ -424,6 +425,7 @@ object VCGen {
     }
   }
 
+  /* Translates the bool commands into assertions */
   def boolToAssn(be: BoolExp): Assertion = {
     if (be.isInstanceOf[BCmp]) {
       var bc = be.asInstanceOf[BCmp]
@@ -499,6 +501,7 @@ object VCGen {
     return declaration
   }
 
+  /* Translates a single statement into SMT helper function. */
   def SMTAhelper(vc: ArithExp, vars: ArrayBuffer[String], arrays: ArrayBuffer[String]): 
     (String, ArrayBuffer[String], ArrayBuffer[String]) = {
     if (vc.isInstanceOf[Num]){
@@ -632,29 +635,23 @@ object VCGen {
     val reader = new FileReader(args(0))
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
-    // println(parsedProgram)
     // translate into guarded commands
     val preconditions = parsedProgram.get._2
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
-    // println("GUARDED COMMANDS:")
-    // println(guardedProgram)
     // generate verification conditions
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), 
       scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
-    // println("VERIFICATION CONDITION:")
-    // println(verificationConditions)
     // translate into the SMT Lib format
-    // println("SMT LIB:")
     var smtLibFormat = vcToSMT(verificationConditions._1, verificationConditions._3)
-    println(smtLibFormat)
     // write to an external file
     val file = new File("smt.txt")
     val bw = new BufferedWriter(new FileWriter(file))
     bw.write(smtLibFormat)
     bw.close()
     // call z3
-    // val process = Process("z3 -smt2 smt.txt").lines
+    val process = Process("z3 -smt2 smt.txt").lines
+    process.foreach(println)
   }
 }
