@@ -1,6 +1,7 @@
 import scala.util.parsing.combinator._
-import java.io.FileReader
 import scala.collection.mutable.ArrayBuffer
+import java.io._
+import sys.process._
 
 // TODO:
 // 1. hook it up with Z3
@@ -622,24 +623,33 @@ object VCGen {
   }
 
   def main(args: Array[String]): Unit = {
+    // parse the program
     val reader = new FileReader(args(0))
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
-    println("PARSED:")
     println(parsedProgram)
+    // translate into guarded commands
     val preconditions = parsedProgram.get._2
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
     println("GUARDED COMMANDS:")
     println(guardedProgram)
-    // What to do to start with TRUE ????????
+    // generate verification conditions
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), 
       scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
     println("VERIFICATION CONDITION:")
     println(verificationConditions)
+    // translate into the SMT Lib format
     println("SMT LIB:")
     var smtLibFormat = vcToSMT(verificationConditions._1, verificationConditions._3)
     println(smtLibFormat)
+    // write to an external file
+    val file = new File("smt.txt")
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(smtLibFormat)
+    bw.close()
+    // call z3
+    val process = Process("z3 -smt2 smt.txt").lines
   }
 }
