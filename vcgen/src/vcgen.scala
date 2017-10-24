@@ -2,8 +2,9 @@ import scala.util.parsing.combinator._
 import java.io.FileReader
 import scala.collection.mutable.ArrayBuffer
 
-// TODO:
-// 1. hook it up with Z3
+// TODO: right now all the imp examples that were given to us generate something except find
+// (parser issue). need to fix this problem. also, were just returning "sat"
+// and an empty model for empty, which is wrong.
 
 object VCGen {
 
@@ -595,7 +596,7 @@ object VCGen {
 
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion, arrays: scala.collection.mutable.Map[String, Int]): String = {
-    var SMTprogram : String = "(set-option :produce-models true)\n(set-logic QF_LIA)\n"
+    var SMTprogram : String = "(set-option :produce-models true)\n"
     var body = SMThelper(vc, ArrayBuffer[String](), ArrayBuffer[String]())
     var val1 : String = "" //= body._1
     var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
@@ -609,7 +610,9 @@ object VCGen {
     }
     // add everything from arrays to val3
     for (key <- arrays){
+      if (!(val3 contains key._1)){
         val3 += key._1
+      }
     }
     // remove arrays from val2 (vars)
     for (variable <- val3){
@@ -617,13 +620,8 @@ object VCGen {
         val2 -= variable
       }
     }
-<<<<<<< HEAD
     return SMTprogram + declareVars(val2.toArray) + declareArrays(val3.toArray) +
     "(assert (not " + val1 + "))" + "\n(check-sat)\n(get-model)"
-=======
-    return SMTprogram + declareVars(val2.toSet.toArray) + declareArrays(val3.toSet.toArray) +
-    "(assert " + val1 + ")" + "\n(check-sat)\n(get-model)"
->>>>>>> 34929228fd8d4ab3952309d27c718dabebaf687c
   }
 
   def main(args: Array[String]): Unit = {
