@@ -1,14 +1,11 @@
-program assn
-  pre  n >= 0
-  post p = m * n
+program benchmark1
+  pre x = 0
+  post x = 10
 is
-  p := 0;
   x := 0;
-  while x < n
-  	inv x <= n
-    inv p = x * m
+  while x < 10
+    inv x <= 10
   do
     x := x + 1;
-    p := p + m;
   end
 end

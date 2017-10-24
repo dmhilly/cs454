@@ -1,18 +1,18 @@
 program benchmark4
-  pre 1 = 1
-  post y != m - n
+  pre 1 = 1
+  post y != m - n
 is
-  x := n;
-  y := m;
-  if 0 <= n then
-  z:= -1;
-  else
-  z := 1;
-  end
-  while x != 0
-  inv y - x = m - n
-  do
-  y := y + z;
-  x := x + z;
-  end
+  x := n;
+  y := m;
+  if 0 <= n then
+    z:= -1;
+  else
+    z := 1;
+  end
+  while x != 0
+    inv y - x = m - n
+  do
+    y := y + z;
+    x := x + z;
+  end
 end

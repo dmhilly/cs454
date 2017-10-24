@@ -3,6 +3,10 @@ import scala.collection.mutable.ArrayBuffer
 import java.io._
 import sys.process._
 
+// TODO: right now all the imp examples that were given to us generate something except find
+// (parser issue). need to fix this problem. also, were just returning "sat"
+// and an empty model for empty, which is wrong.
+
 object VCGen {
 
   /* Arithmetic expressions. */
@@ -597,7 +601,7 @@ object VCGen {
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion, arrays: scala.collection.mutable.Map[String, Int]): String = {
     var body = SMThelper(vc, ArrayBuffer[String](), ArrayBuffer[String]())
-    var val1 : String = ""
+    var val1 : String = "" //= body._1
     var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
     var val3 : ArrayBuffer[String] = ArrayBuffer[String]()
     if (body == null) {
@@ -628,15 +632,21 @@ object VCGen {
     val reader = new FileReader(args(0))
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
+    // println(parsedProgram)
     // translate into guarded commands
     val preconditions = parsedProgram.get._2
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
+    // println("GUARDED COMMANDS:")
+    // println(guardedProgram)
     // generate verification conditions
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), 
       scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
+    // println("VERIFICATION CONDITION:")
+    // println(verificationConditions)
     // translate into the SMT Lib format
+    // println("SMT LIB:")
     var smtLibFormat = vcToSMT(verificationConditions._1, verificationConditions._3)
     println(smtLibFormat)
     // write to an external file
@@ -645,6 +655,6 @@ object VCGen {
     bw.write(smtLibFormat)
     bw.close()
     // call z3
-    val process = Process("z3 -smt2 smt.txt").lines
+    // val process = Process("z3 -smt2 smt.txt").lines
   }
 }
