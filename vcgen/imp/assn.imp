@@ -1,3 +1,14 @@
-program assn is
+program assn
+  pre  n >= 0
+  post p = m * n
+is
+  p := 0;
   x := 0;
+  while x < n
+  	inv x <= n
+    inv p = x * m
+  do
+    x := x + 1;
+    p := p + m;
+  end
 end

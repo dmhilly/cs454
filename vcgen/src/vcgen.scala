@@ -385,7 +385,7 @@ object VCGen {
   def computeGC(pre: Preconditions, post: Postconditions, block: Block): GuardedCommand = {
     // want to return (programName, c_H)
     var result = GC(block, null)
-    var command = smartConcat(assumeAll(pre), smartConcat(result._1, assumeAll(post)))
+    var command = smartConcat(assumeAll(pre), smartConcat(result._1, assertAll(post)))
     return command
   }
 
@@ -562,7 +562,7 @@ object VCGen {
     } else if (vc.isInstanceOf[ANot]){
       var an = vc.asInstanceOf[ANot]
       var val1 = SMThelper(an.a, vars, arrays) 
-      return ("(not" + val1._1 + ")", val1._2, val1._3)
+      return ("(not " + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[ADisj]){
       var ad = vc.asInstanceOf[ADisj]
       var val1 = SMThelper(ad.left, vars, arrays) 
@@ -581,11 +581,11 @@ object VCGen {
     } else if (vc.isInstanceOf[AForall]){
       var af = vc.asInstanceOf[AForall]
       var val1 = SMThelper(af.a, vars, arrays)
-      return ("(forall (" + af.x + " Int)" + val1._1 + ")", val1._2, val1._3)
+      return ("(forall ((" + af.x + " Int))" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[AExists]){
       var ae = vc.asInstanceOf[AExists]
       var val1 = SMThelper(ae.a, vars, arrays)
-      return ("(exists (" + ae.x + " Int)" + val1._1 + ")", val1._2, val1._3)
+      return ("(exists ((" + ae.x.mkString(" ") + " Int))" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[AParens]){
       var ap = vc.asInstanceOf[AParens]
       return SMThelper(ap.a, vars, arrays)
@@ -618,8 +618,13 @@ object VCGen {
         val2 -= variable
       }
     }
+<<<<<<< HEAD
+    return SMTprogram + declareVars(val2.toArray) + declareArrays(val3.toArray) +
+    "(assert (not " + val1 + "))" + "\n(check-sat)\n(get-model)"
+=======
     return SMTprogram + declareVars(val2.toSet.toArray) + declareArrays(val3.toSet.toArray) +
     "(assert " + val1 + ")" + "\n(check-sat)\n(get-model)"
+>>>>>>> 34929228fd8d4ab3952309d27c718dabebaf687c
   }
 
   def main(args: Array[String]): Unit = {
