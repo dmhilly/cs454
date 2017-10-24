@@ -2,9 +2,8 @@ import scala.util.parsing.combinator._
 import java.io.FileReader
 import scala.collection.mutable.ArrayBuffer
 
-// TODO: right now all the imp examples that were given to us generate something except find
-// (parser issue). need to fix this problem. also, were just returning "sat"
-// and an empty model for empty, which is wrong.
+// TODO:
+// 1. hook it up with Z3
 
 object VCGen {
 
@@ -610,9 +609,7 @@ object VCGen {
     }
     // add everything from arrays to val3
     for (key <- arrays){
-      if (!(val3 contains key._1)){
         val3 += key._1
-      }
     }
     // remove arrays from val2 (vars)
     for (variable <- val3){
@@ -620,7 +617,7 @@ object VCGen {
         val2 -= variable
       }
     }
-    return SMTprogram + declareVars(val2.toArray) + declareArrays(val3.toArray) +
+    return SMTprogram + declareVars(val2.toSet.toArray) + declareArrays(val3.toSet.toArray) +
     "(assert " + val1 + ")" + "\n(check-sat)\n(get-model)"
   }
 
