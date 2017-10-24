@@ -73,6 +73,7 @@ object VCGen {
   case class BAssume(a: BoolExp) extends GuardedCommand
   case class Assert(a: Assertion) extends GuardedCommand
   case class Havoc(x: String) extends GuardedCommand
+  case class ArrayHavoc(a: String) extends GuardedCommand
   case class Concat(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
   case class Rect(c1: GuardedCommand, c2: GuardedCommand) extends GuardedCommand
 
@@ -199,7 +200,7 @@ object VCGen {
         gc = smartConcat(gc, Concat(Havoc(pStatement.x1), Havoc(pStatement.x2)))
       } else if (statement.isInstanceOf[Write]) {
         var wStatement = statement.asInstanceOf[Write]
-        gc = smartConcat(gc, Havoc(wStatement.x))
+        gc = smartConcat(gc, ArrayHavoc(wStatement.x))
       } else if (statement.isInstanceOf[If]) {
         var iStatement = statement.asInstanceOf[If]
         gc = smartConcat(gc, Concat(havocVars(iStatement.th), havocVars(iStatement.el)))
@@ -297,7 +298,7 @@ object VCGen {
     var v = statement.value
     var newVars = updateMap(a, vars)
     var tmp = a + "tmp" + newVars(a)
-    return (Concat(Assume(ACmp((Var(tmp), "=", Var(a)))), Concat(Havoc(a), 
+    return (Concat(Assume(ACmp((Var(tmp), "=", Var(a)))), Concat(ArrayHavoc(a), 
       Assume(ACmp((Var(a), "=", AWrite(tmp, i, v)))))), newVars)
   }
 
@@ -442,33 +443,40 @@ object VCGen {
   }
 
   /* Translates the guarded program into a verification condition */
-  def genVC(gC: GuardedCommand, b: Assertion, vars: scala.collection.mutable.Map[String, Int]): (Assertion, scala.collection.mutable.Map[String, Int] )= {
+  def genVC(gC: GuardedCommand, b: Assertion, vars: scala.collection.mutable.Map[String, Int], arrays: scala.collection.mutable.Map[String, Int]): 
+    (Assertion, scala.collection.mutable.Map[String, Int], scala.collection.mutable.Map[String, Int])= {
     var wp : Assertion = null
     if (gC.isInstanceOf[Assume]) {
       var assume = gC.asInstanceOf[Assume]
-      return (AImplies(assume.a, b), vars)
+      return (AImplies(assume.a, b), vars, arrays)
     } else if (gC.isInstanceOf[BAssume]) {
       var bassume = gC.asInstanceOf[BAssume]
       var assnexp = boolToAssn(bassume.a)
-      return (AImplies(assnexp, b), vars)
+      return (AImplies(assnexp, b), vars, arrays)
     } else if (gC.isInstanceOf[Assert]) {
       var assert = gC.asInstanceOf[Assert]
-      return (AConj(assert.a, b), vars)
+      return (AConj(assert.a, b), vars, arrays)
     } else if (gC.isInstanceOf[Havoc]) {
       var havoc = gC.asInstanceOf[Havoc]
       var newVars = updateMap(havoc.x, vars)
-      return (replaceAssertion(b, havoc.x, havoc.x + "frsh" + newVars(havoc.x)), newVars) //tmp == null???
+      return (replaceAssertion(b, havoc.x, havoc.x + "frsh" + newVars(havoc.x)), newVars, arrays) //tmp == null???
+    } else if (gC.isInstanceOf[ArrayHavoc]) {
+      var ahavoc = gC.asInstanceOf[ArrayHavoc]
+      var newArrays = updateMap(ahavoc.a, arrays)
+      var freshName = ahavoc.a + "frsh" + newArrays(ahavoc.a)
+      newArrays = updateMap(freshName, newArrays)
+      return (replaceAssertion(b, ahavoc.a, freshName), vars, newArrays)
     } else if (gC.isInstanceOf[Concat]) {
       var concat = gC.asInstanceOf[Concat]
-      var result2 = genVC(concat.c2, b, vars)
-      return genVC(concat.c1, result2._1, result2._2)
+      var result2 = genVC(concat.c2, b, vars, arrays)
+      return genVC(concat.c1, result2._1, result2._2, result2._3)
     } else if (gC.isInstanceOf[Rect]){
       var rect = gC.asInstanceOf[Rect]
-      var result1 = genVC(rect.c1, b, vars)
-      var result2 = genVC(rect.c2, b, result1._2)
-      return (AConj(result1._1, result2._1), result2._2)
+      var result1 = genVC(rect.c1, b, vars, arrays)
+      var result2 = genVC(rect.c2, b, result1._2, result1._3)
+      return (AConj(result1._1, result2._1), result2._2, result2._3)
     } else { // gC is null
-      return (null, vars)
+      return (null, vars, arrays)
     }
   }
 
@@ -476,117 +484,143 @@ object VCGen {
   def declareVars(vars: Array[String]): String = {
     var declaration : String = ""
     for (v <- vars){
-       declaration += "(declare-fun " + v + "() Int)\n" // always int?? idk.
+       declaration += "(declare-fun " + v + " () Int)\n" 
     }
     return declaration
   }
 
-  def SMTAhelper(vc: ArithExp, vars: ArrayBuffer[String]): (String, ArrayBuffer[String]) = {
+  /* Declare all arrays seen in the program. */
+  def declareArrays(arrays: Array[String]): String = {
+    var declaration : String = ""
+    for (a <- arrays){
+       declaration += "(declare-fun " + a + " () (Array Int Int))\n"
+    }
+    return declaration
+  }
+
+  def SMTAhelper(vc: ArithExp, vars: ArrayBuffer[String], arrays: ArrayBuffer[String]): 
+    (String, ArrayBuffer[String], ArrayBuffer[String]) = {
     if (vc.isInstanceOf[Num]){
       var num = vc.asInstanceOf[Num]
-      return (num.value.toString, vars)
+      return (num.value.toString, vars, arrays)
     } else if (vc.isInstanceOf[Var]) {
       var v = vc.asInstanceOf[Var]
       if (vars.find(_ == v.name) == None){
         vars += v.name
       }
-      return (v.name, vars)
+      return (v.name, vars, arrays)
     } else if (vc.isInstanceOf[Read]) {
       var re = vc.asInstanceOf[Read]
-      var index = SMTAhelper(re.ind, vars)
-      return ("(select " + re.name + " " + index._1 + ")", index._2)
+      var index = SMTAhelper(re.ind, vars, arrays)
+      arrays += re.name
+      return ("(select " + re.name + " " + index._1 + ")", index._2, arrays)
     } else if (vc.isInstanceOf[Add]) {
       var ae = vc.asInstanceOf[Add]
-      var val1 = SMTAhelper(ae.left, vars)
-      var val2 = SMTAhelper(ae.right, val1._2)
-      return ("(+ " + val1._1 + " " + val2._1 + ")", val2._2)
+      var val1 = SMTAhelper(ae.left, vars, arrays)
+      var val2 = SMTAhelper(ae.right, val1._2, val1._3)
+      return ("(+ " + val1._1 + " " + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[Sub]) {
       var se = vc.asInstanceOf[Sub]
-      var val1 = SMTAhelper(se.left, vars)
-      var val2 = SMTAhelper(se.right, val1._2)
-      return ("(- " + val1._1 + " " + val2._1 + ")", val2._2)
+      var val1 = SMTAhelper(se.left, vars, arrays)
+      var val2 = SMTAhelper(se.right, val1._2, val1._3)
+      return ("(- " + val1._1 + " " + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[Mul]) {
       var me = vc.asInstanceOf[Mul]
-      var val1 = SMTAhelper(me.left, vars)
-      var val2 = SMTAhelper(me.right, val1._2)
-      return ("(* " + val1._1 + " " + val2._1 + ")", val2._2)
+      var val1 = SMTAhelper(me.left, vars, arrays)
+      var val2 = SMTAhelper(me.right, val1._2, val1._3)
+      return ("(* " + val1._1 + " " + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[Div]) {
       var de = vc.asInstanceOf[Div]
-      var val1 = SMTAhelper(de.left, vars)
-      var val2 = SMTAhelper(de.right, val1._2)
-      return ("(div " + val1._1 + " " + val2._1 + ")", val2._2)
+      var val1 = SMTAhelper(de.left, vars, arrays)
+      var val2 = SMTAhelper(de.right, val1._2, val1._3)
+      return ("(div " + val1._1 + " " + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[Mod]) {
       var me = vc.asInstanceOf[Mod]
-      var val1 = SMTAhelper(me.left, vars)
-      var val2 = SMTAhelper(me.right, val1._2)
-      return ("(mod " + val1._1 + " " + val2._1 +")", val2._2)
+      var val1 = SMTAhelper(me.left, vars, arrays)
+      var val2 = SMTAhelper(me.right, val1._2, val1._3)
+      return ("(mod " + val1._1 + " " + val2._1 +")", val2._2, val2._3)
     } else if (vc.isInstanceOf[Parens]) {
       var pe = vc.asInstanceOf[Parens]
-      return SMTAhelper(pe.a, vars)
+      return SMTAhelper(pe.a, vars, arrays)
     } else{ // AWrite
       var we = vc.asInstanceOf[AWrite]
-      var value = SMTAhelper(we.v, vars)
-      var index = SMTAhelper(we.i, value._2)
-      return ("(= (store " + we.a + " " + value._1 + " " + index._1 + ") " + we.a + ")", index._2)
+      var value = SMTAhelper(we.v, vars, arrays)
+      var index = SMTAhelper(we.i, value._2, value._3)
+      arrays += we.a
+      return ("(= (store " + we.a + " " + value._1 + " " + index._1 + ") " + we.a + ")", index._2, arrays)
     }
   }
 
   /* Translates a single statement into SMT. */
-  def SMThelper(vc: Assertion, vars: ArrayBuffer[String]): (String, ArrayBuffer[String]) = {
-    // Q: 1) do we have to support functions
+  def SMThelper(vc: Assertion, vars: ArrayBuffer[String], arrays: ArrayBuffer[String]): 
+    (String, ArrayBuffer[String], ArrayBuffer[String]) = {
     if (vc.isInstanceOf[ACmp]) {
       var ac = vc.asInstanceOf[ACmp]
-      var val1 = SMTAhelper(ac.cmp._1, vars)
-      var val2 = SMTAhelper(ac.cmp._3, val1._2) 
-      return ("(" + ac.cmp._2 + " " + val1._1 + " " + val2._1 + ")", val2._2)
+      var val1 = SMTAhelper(ac.cmp._1, vars, arrays)
+      var val2 = SMTAhelper(ac.cmp._3, val1._2, val1._3) 
+      return ("(" + ac.cmp._2 + " " + val1._1 + " " + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[ANot]){
       var an = vc.asInstanceOf[ANot]
-      var val1 = SMThelper(an.a, vars) 
-      return ("(not" + val1._1 + ")", vars)
+      var val1 = SMThelper(an.a, vars, arrays) 
+      return ("(not" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[ADisj]){
       var ad = vc.asInstanceOf[ADisj]
-      var val1 = SMThelper(ad.left, vars) 
-      var val2 = SMThelper(ad.right, val1._2)
-      return ("(or " + val1._1 + val2._1 + ")", val2._2)
+      var val1 = SMThelper(ad.left, vars, arrays) 
+      var val2 = SMThelper(ad.right, val1._2, val1._3)
+      return ("(or " + val1._1 + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[AConj]){
       var aco = vc.asInstanceOf[AConj]
-      var val1 = SMThelper(aco.left, vars) 
-      var val2 = SMThelper(aco.right, val1._2)
-      return ("(and " + val1._1  + val2._1 + ")", val2._2)
+      var val1 = SMThelper(aco.left, vars, arrays) 
+      var val2 = SMThelper(aco.right, val1._2, val1._3)
+      return ("(and " + val1._1  + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[AImplies]){
       var ai = vc.asInstanceOf[AImplies]
-      var val1 = SMThelper(ai.left, vars)
-      var val2 = SMThelper(ai.right, val1._2)
-      return ("(=> " + val1._1 + val2._1 + ")", val2._2)
+      var val1 = SMThelper(ai.left, vars, arrays)
+      var val2 = SMThelper(ai.right, val1._2, val1._3)
+      return ("(=> " + val1._1 + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[AForall]){
       var af = vc.asInstanceOf[AForall]
-      var val1 = SMThelper(af.a, vars)
-      return ("(forall (" + af.x + " Int)" + val1._1 + ")", val1._2)
+      var val1 = SMThelper(af.a, vars, arrays)
+      return ("(forall (" + af.x + " Int)" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[AExists]){
       var ae = vc.asInstanceOf[AExists]
-      var val1 = SMThelper(ae.a, vars)
-      return ("(exists (" + ae.x + " Int)" + val1._1 + ")", val1._2)
+      var val1 = SMThelper(ae.a, vars, arrays)
+      return ("(exists (" + ae.x + " Int)" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[AParens]){
       var ap = vc.asInstanceOf[AParens]
-      return SMThelper(ap.a, vars)
+      return SMThelper(ap.a, vars, arrays)
     } else {
       return null
     }
   }
+
   /* Translates verification conditions into the SMT Lib format. */
-  def vcToSMT(vc: Assertion): String = {
+  def vcToSMT(vc: Assertion, arrays: scala.collection.mutable.Map[String, Int]): String = {
     var SMTprogram : String = "(set-option :produce-models true)\n(set-logic QF_LIA)\n"
-    var variables : ArrayBuffer[String] = ArrayBuffer[String]()// array of seen variables
-    var body = SMThelper(vc, variables)
+    var body = SMThelper(vc, ArrayBuffer[String](), ArrayBuffer[String]())
     var val1 : String = "" //= body._1
     var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
+    var val3 : ArrayBuffer[String] = ArrayBuffer[String]()
     if (body == null) {
       val1 = "true";
     } else {
       val1 = body._1
       val2 = body._2
+      val3 = body._3
     }
-    return SMTprogram + declareVars(val2.toArray) + 
+    // add everything from arrays to val3
+    for (key <- arrays){
+      if (!(val3 contains key._1)){
+        val3 += key._1
+      }
+    }
+    // remove arrays from val2 (vars)
+    for (variable <- val3){
+      if (val2 contains variable){
+        val2 -= variable
+      }
+    }
+    return SMTprogram + declareVars(val2.toArray) + declareArrays(val3.toArray) +
     "(assert " + val1 + ")" + "\n(check-sat)\n(get-model)"
   }
 
@@ -603,11 +637,12 @@ object VCGen {
     println("GUARDED COMMANDS:")
     println(guardedProgram)
     // What to do to start with TRUE ????????
-    var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), scala.collection.mutable.Map[String, Int]())
+    var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), 
+      scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
     println("VERIFICATION CONDITION:")
     println(verificationConditions)
     println("SMT LIB:")
-    var smtLibFormat = vcToSMT(verificationConditions._1)
+    var smtLibFormat = vcToSMT(verificationConditions._1, verificationConditions._3)
     println(smtLibFormat)
   }
 }
