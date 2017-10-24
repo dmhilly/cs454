@@ -314,9 +314,9 @@ object VCGen {
     newVars = updateMap(x2, newVars)
     var tmp1 = x1 + "tmp" + newVars(x1)
     var tmp2 = x2 + "tmp" + newVars(x2)
-    return (Concat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
-          Concat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), Concat(Havoc(x1), Concat(Havoc(x2),
-          Concat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
+    return (smartConcat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
+          smartConcat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), smartConcat(Havoc(x1), smartConcat(Havoc(x2),
+          smartConcat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
           Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2))))))))), newVars)
   }
 
@@ -328,8 +328,8 @@ object VCGen {
     var c2 = statement.el
     var c1result = GC(c1, vars)
     var c2result = GC(c2, c1result._2)
-    return (Rect(Concat(BAssume(b), c1result._1), 
-      Concat(BAssume(BNot(b)), c2result._1)), c2result._2)
+    return (Rect(smartConcat(BAssume(b), c1result._1), 
+      smartConcat(BAssume(BNot(b)), c2result._1)), c2result._2)
   }
 
   /* Translate a While statement into guarded commands. */
@@ -457,6 +457,7 @@ object VCGen {
       var assert = gC.asInstanceOf[Assert]
       return (AConj(assert.a, b), vars, arrays)
     } else if (gC.isInstanceOf[Havoc]) {
+      println("here")
       var havoc = gC.asInstanceOf[Havoc]
       var newVars = updateMap(havoc.x, vars)
       return (replaceAssertion(b, havoc.x, havoc.x + "frsh" + newVars(havoc.x)), newVars, arrays) //tmp == null???
@@ -558,6 +559,9 @@ object VCGen {
       var ac = vc.asInstanceOf[ACmp]
       var val1 = SMTAhelper(ac.cmp._1, vars, arrays)
       var val2 = SMTAhelper(ac.cmp._3, val1._2, val1._3) 
+      if (ac.cmp._2 == "!=") {
+        return ("(not (= " + val1._1 + " " + val2._1 + "))", val2._2, val2._3)
+      }
       return ("(" + ac.cmp._2 + " " + val1._1 + " " + val2._1 + ")", val2._2, val2._3)
     } else if (vc.isInstanceOf[ANot]){
       var an = vc.asInstanceOf[ANot]
@@ -581,7 +585,7 @@ object VCGen {
     } else if (vc.isInstanceOf[AForall]){
       var af = vc.asInstanceOf[AForall]
       var val1 = SMThelper(af.a, vars, arrays)
-      return ("(forall ((" + af.x + " Int))" + val1._1 + ")", val1._2, val1._3)
+      return ("(forall ((" + af.x.mkString(" ") + " Int))" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[AExists]){
       var ae = vc.asInstanceOf[AExists]
       var val1 = SMThelper(ae.a, vars, arrays)
@@ -596,7 +600,6 @@ object VCGen {
 
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion, arrays: scala.collection.mutable.Map[String, Int]): String = {
-    var SMTprogram : String = "(set-option :produce-models true)\n"
     var body = SMThelper(vc, ArrayBuffer[String](), ArrayBuffer[String]())
     var val1 : String = "" //= body._1
     var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
@@ -620,8 +623,8 @@ object VCGen {
         val2 -= variable
       }
     }
-    return SMTprogram + declareVars(val2.toArray) + declareArrays(val3.toArray) +
-    "(assert (not " + val1 + "))" + "\n(check-sat)\n(get-model)"
+    return declareVars(val2.toSet.toArray) + declareArrays(val3.toSet.toArray) +
+    "(assert (not " + val1 + "))" + "\n(check-sat)"
   }
 
   def main(args: Array[String]): Unit = {
