@@ -1,0 +1,14 @@
+program add
+  pre 0 <= x && 0 <= y
+  post r = x * y
+is
+  r := x;
+  n := y;
+  while n != 0
+    inv r = x + y - n
+    inv 0 <= n
+  do
+    r := r+1;
+    n := n-1;
+  end
+end

@@ -1,0 +1,14 @@
+program arrayIterate
+    pre N > 0
+    pre forall i, i >= 0 && i < N ==> a[i] = 3
+    post forall i, i >= 0 && i < N ==> a[i] = 2
+is
+    i := 0;
+    while i < N
+        inv 0 <= i && i <= N
+        inv forall j, 0 <= j && j < i ==> a[j] = 2
+    do
+        a[i] := 2;
+        i := i + 1;
+    end
+end

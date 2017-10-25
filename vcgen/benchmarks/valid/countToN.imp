@@ -1,0 +1,12 @@
+program countToN
+    pre n >= 0
+    post i = n
+is
+    i := 0;
+    while i < n
+        inv i >= 0
+        inv i <= n
+    do
+        i := i + 1;
+    end
+end

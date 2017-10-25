@@ -1,0 +1,8 @@
+program assign
+  pre x = n
+  pre y = n
+  post x = n + n
+  post y = 0
+is
+  x,y := x+y,x-y;
+end

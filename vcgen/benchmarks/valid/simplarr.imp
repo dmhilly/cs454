@@ -1,0 +1,11 @@
+program simplarr
+  post a[j] <= a[j+1]
+is
+  j := 0;
+  if a[j] > a[j+1] then
+    temp := a[j];
+    a[j] := a[j+1];
+    a[j+1] := temp;
+  else
+  end
+end
