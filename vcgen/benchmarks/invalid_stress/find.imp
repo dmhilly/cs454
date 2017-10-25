@@ -1,0 +1,15 @@
+program find
+  pre  0 <= N
+  post a[n] = x || forall i, (0 <= i && i < N) ==> a[i] != x
+is
+  c := 100;
+  n := c / 10;
+  while n < N && a[n] != x
+    inv 0 <= n && n <= N && c < n
+    inv forall i, (0 <= i && i < n) ==> a[i] != x
+    inv exists r, r < n
+  do
+    n := n + 1;
+    a[n] := a[n-3] / 3;
+  end
+end

@@ -1,0 +1,1 @@
+program assignToArray post x[0] = 5 is x[0] := 5; end
