@@ -3,6 +3,10 @@ import scala.collection.mutable.ArrayBuffer
 import java.io._
 import sys.process._
 
+// TODO: right now all the imp examples that were given to us generate something except find
+// (parser issue). need to fix this problem. also, were just returning "sat"
+// and an empty model for empty, which is wrong.
+
 object VCGen {
 
   /* Arithmetic expressions. */
@@ -386,6 +390,7 @@ object VCGen {
     return command
   }
 
+  /* Replace assertions with a fresh variable */
   def replaceAssertion(assert: Assertion, x: String, tmp: String): Assertion = {
     if (assert.isInstanceOf[ACmp]) {
       var cassert = assert.asInstanceOf[ACmp]
@@ -420,6 +425,7 @@ object VCGen {
     }
   }
 
+  /* Translates the bool commands into assertions */
   def boolToAssn(be: BoolExp): Assertion = {
     if (be.isInstanceOf[BCmp]) {
       var bc = be.asInstanceOf[BCmp]
@@ -495,6 +501,7 @@ object VCGen {
     return declaration
   }
 
+  /* Translates a single statement into SMT helper function. */
   def SMTAhelper(vc: ArithExp, vars: ArrayBuffer[String], arrays: ArrayBuffer[String]): 
     (String, ArrayBuffer[String], ArrayBuffer[String]) = {
     if (vc.isInstanceOf[Num]){
@@ -597,7 +604,7 @@ object VCGen {
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion, arrays: scala.collection.mutable.Map[String, Int]): String = {
     var body = SMThelper(vc, ArrayBuffer[String](), ArrayBuffer[String]())
-    var val1 : String = ""
+    var val1 : String = "" //= body._1
     var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
     var val3 : ArrayBuffer[String] = ArrayBuffer[String]()
     if (body == null) {
@@ -638,7 +645,6 @@ object VCGen {
       scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
     // translate into the SMT Lib format
     var smtLibFormat = vcToSMT(verificationConditions._1, verificationConditions._3)
-    println(smtLibFormat)
     // write to an external file
     val file = new File("smt.txt")
     val bw = new BufferedWriter(new FileWriter(file))
@@ -646,5 +652,6 @@ object VCGen {
     bw.close()
     // call z3
     val process = Process("z3 -smt2 smt.txt").lines
+    process.foreach(println)
   }
 }
