@@ -244,7 +244,11 @@ object VCGen {
     } else {
       if (e.isInstanceOf[Read]) {
         var re = e.asInstanceOf[Read]
-        return Read(re.name, replace(re.ind, x, tmp))
+        var name = re.name
+        if (name == x) {
+          name = tmp
+        }
+        return Read(name, replace(re.ind, x, tmp))
       } else if (e.isInstanceOf[Add]) {
         var ae = e.asInstanceOf[Add]
         return Add(replace(ae.left, x, tmp), replace(ae.right, x, tmp))
@@ -265,7 +269,11 @@ object VCGen {
         return Parens(replace(pe.a, x, tmp))
       } else{ // AWrite
         var we = e.asInstanceOf[AWrite]
-        return AWrite(we.a, replace(we.i, x, tmp), replace(we.v, x, tmp))
+        var a = we.a
+        if (a == x){
+          a = tmp
+        }
+        return AWrite(a, replace(we.i, x, tmp), replace(we.v, x, tmp))
       }
     }
   }
@@ -326,6 +334,10 @@ object VCGen {
           smartConcat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), smartConcat(Havoc(x1), smartConcat(Havoc(x2),
           smartConcat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
           Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2))))))))), newVars)
+    /*return (smartConcat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
+            smartConcat(Havoc(x1), smartConcat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
+            smartConcat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), smartConcat(Havoc(x2),
+            Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2))))))))), newVars)*/
   }
 
   /* Translate an If statement into guarded commands. */
@@ -436,7 +448,6 @@ object VCGen {
       var passert = assert.asInstanceOf[AParens]
       return AParens(replaceAssertion(passert.a, x, tmp))
     } else{
-      println("replace assertion: " + assert)
       return null
     }
   }
@@ -567,7 +578,7 @@ object VCGen {
       var value = SMTAhelper(we.v, vars, arrays)
       var index = SMTAhelper(we.i, value._2, value._3)
       arrays += we.a
-      return ("(store " + we.a + " " + value._1 + " " + index._1 + ")", index._2, arrays)
+      return ("(store " + we.a + " " + index._1 + " " +  value._1  + ")", index._2, arrays)
     }
   }
 
@@ -656,9 +667,11 @@ object VCGen {
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
+    println(guardedProgram)
     // generate verification conditions
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), 
       scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
+    println(verificationConditions)
     // translate into the SMT Lib format
     var smtLibFormat = vcToSMT(verificationConditions._1, verificationConditions._3)
     // write to an external file
