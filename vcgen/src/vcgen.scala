@@ -3,10 +3,6 @@ import scala.collection.mutable.ArrayBuffer
 import java.io._
 import sys.process._
 
-// TODO: right now all the imp examples that were given to us generate something except find
-// (parser issue). need to fix this problem. also, were just returning "sat"
-// and an empty model for empty, which is wrong.
-
 object VCGen {
 
   /* Arithmetic expressions. */
@@ -196,15 +192,18 @@ object VCGen {
       if (statement.isInstanceOf[Assign]) {
         var aStatement = statement.asInstanceOf[Assign]
         gc = smartConcat(gc, Havoc(aStatement.x))
+        print("havoc " + aStatement.x + "; ")
       } else if (statement.isInstanceOf[ParAssign]) {
         var pStatement = statement.asInstanceOf[ParAssign]
-        gc = smartConcat(gc, Concat(Havoc(pStatement.x1), Havoc(pStatement.x2)))
+        gc = smartConcat(gc, smartConcat(Havoc(pStatement.x1), Havoc(pStatement.x2)))
+         print("havoc " + pStatement.x1 + "; havoc" + pStatement.x2 + "; ")
       } else if (statement.isInstanceOf[Write]) {
         var wStatement = statement.asInstanceOf[Write]
         gc = smartConcat(gc, ArrayHavoc(wStatement.x))
+        print("havoc " + wStatement.x + "; ")
       } else if (statement.isInstanceOf[If]) {
         var iStatement = statement.asInstanceOf[If]
-        gc = smartConcat(gc, Concat(havocVars(iStatement.th), havocVars(iStatement.el)))
+        gc = smartConcat(gc, smartConcat(havocVars(iStatement.th), havocVars(iStatement.el)))
       } else { // while
         var wStatement = statement.asInstanceOf[While]
         gc = smartConcat(gc, havocVars(wStatement.body))
@@ -287,8 +286,10 @@ object VCGen {
     var e = statement.value
     var newVars = updateMap(x, vars)
     var tmp = x + "tmp" + newVars(x)
-    return (Concat(Assume(ACmp((Var(tmp), "=", Var(x)))), 
-          Concat(Havoc(x), Assume(ACmp((Var(x), "=", replace(e, x, tmp)))))), newVars)
+    println("assume " + tmp + " = " + x + "; havoc " + x + "; assume (" + 
+      x + " = " + e + "[" + tmp + "/" + x + "]);")
+    return (smartConcat(Assume(ACmp((Var(tmp), "=", Var(x)))), 
+          smartConcat(Havoc(x), Assume(ACmp((Var(x), "=", replace(e, x, tmp)))))), newVars)
   }
 
   /* Translate a Write statement into guarded commands. */
@@ -299,7 +300,9 @@ object VCGen {
     var v = statement.value
     var newVars = updateMap(a, vars)
     var tmp = a + "tmp" + newVars(a)
-    return (Concat(Assume(ACmp((Var(tmp), "=", Var(a)))), Concat(ArrayHavoc(a), 
+    println("assume " + tmp + " = " + a + "; havoc " + a + "; assume (" + 
+      a + " = " + "write(" + tmp + ", " + i + ", " + v + ";")
+    return (smartConcat(Assume(ACmp((Var(tmp), "=", Var(a)))), smartConcat(ArrayHavoc(a), 
       Assume(ACmp((Var(a), "=", AWrite(tmp, i, v)))))), newVars)
   }
 
@@ -315,6 +318,10 @@ object VCGen {
     newVars = updateMap(x2, newVars)
     var tmp1 = x1 + "tmp" + newVars(x1)
     var tmp2 = x2 + "tmp" + newVars(x2)
+    println("assume " + tmp1 + " = " + x1 + "; assume " + tmp2 + " = " + x2 + 
+      "; havoc " + x1 + "; havoc" + x2 + "; assume (" + x1 + " = " + e1 + 
+      "[" + tmp1 + "/" + x1 + "]); assume (" + x2 + " = " + e2 + "[" + tmp2 +
+      "/" + x2 + "]);")
     return (smartConcat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
           smartConcat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), smartConcat(Havoc(x1), smartConcat(Havoc(x2),
           smartConcat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
@@ -327,8 +334,12 @@ object VCGen {
     var b = statement.cond
     var c1 = statement.th
     var c2 = statement.el
+    println("(assume " + b + "; ")
     var c1result = GC(c1, vars)
+    println(") []")
+    println("(assume !" + b + ";")
     var c2result = GC(c2, c1result._2)
+    println(")")
     return (Rect(smartConcat(BAssume(b), c1result._1), 
       smartConcat(BAssume(BNot(b)), c2result._1)), c2result._2)
   }
@@ -340,12 +351,16 @@ object VCGen {
     var I = statement.inv
     var b = statement.cond
     var c = statement.body
+    println("assert I;")
     var havocs = havocVars(c)
     var assertions = assertAll(I)
     var assumptions = assumeAll(I)
+    println("assume I;")
+    println("(assume " + b + ";")
     var result = GC(c, vars)
+    println("assert I ; assume false;) [] assume !" + b + ";")
     return (smartConcat(assertions, smartConcat(havocs, smartConcat(assumptions, 
-          Rect(Concat(BAssume(b), smartConcat(result._1, 
+          Rect(smartConcat(BAssume(b), smartConcat(result._1, 
           smartConcat(assertions, Assume(ACmp((Num(1), "=", Num(0))))))), BAssume(BNot(b)))))), result._2)
   }
 
@@ -421,6 +436,7 @@ object VCGen {
       var passert = assert.asInstanceOf[AParens]
       return AParens(replaceAssertion(passert.a, x, tmp))
     } else{
+      println("replace assertion: " + assert)
       return null
     }
   }
@@ -651,7 +667,8 @@ object VCGen {
     bw.write(smtLibFormat)
     bw.close()
     // call z3
-    val process = Process("z3 -smt2 smt.txt").lines
-    process.foreach(println)
+    println(smtLibFormat)
+    //val process = Process("z3 -smt2 smt.txt").lines
+    //process.foreach(println)
   }
 }
