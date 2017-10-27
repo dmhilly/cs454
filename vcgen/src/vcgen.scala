@@ -472,7 +472,6 @@ object VCGen {
   def genVC(gC: GuardedCommand, b: Assertion, vars: scala.collection.mutable.Map[String, Int], arrays: scala.collection.mutable.Map[String, Int]): 
     (Assertion, scala.collection.mutable.Map[String, Int], scala.collection.mutable.Map[String, Int])= {
     var wp : Assertion = null
-    println("command: " + gC + ", B: "+ b)
     if (gC.isInstanceOf[Assume]) {
       var assume = gC.asInstanceOf[Assume]
       return (AImplies(assume.a, b), vars, arrays)
@@ -667,17 +666,14 @@ object VCGen {
     val reader = new FileReader(args(0))
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
-    println(parsedProgram)
     // translate into guarded commands
     val preconditions = parsedProgram.get._2
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
-    println(guardedProgram)
     // generate verification conditions
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), 
       scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
-    println(verificationConditions)
     // translate into the SMT Lib format
     var smtLibFormat = vcToSMT(verificationConditions._1, verificationConditions._3)
     // write to an external file
