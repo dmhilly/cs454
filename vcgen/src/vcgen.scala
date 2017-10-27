@@ -139,8 +139,8 @@ object VCGen {
         case left ~ list => (left /: list) { ADisj(_, _) }
       }
     def aimpl : Parser[Assertion] = 
-      adisj ~ ("==>" ~> adisj) ^^ {
-        case left ~ right => AImplies(left, right)
+      adisj ~ rep("==>" ~> adisj) ^^ {
+        case left ~ list => (left /: list) { AImplies(_, _) }
       } |
       adisj
     def assn : Parser[Assertion] = aimpl
@@ -690,7 +690,7 @@ object VCGen {
     bw.close()
     // call z3
     println(smtLibFormat)
-    val process = Process("z3 -smt2 smt.txt").lines
-    process.foreach(println)
+    //val process = Process("z3 -smt2 smt.txt").lines
+    //process.foreach(println)
   }
 }
