@@ -311,7 +311,7 @@ object VCGen {
     println("assume " + tmp + " = " + a + "; havoc " + a + "; assume (" + 
       a + " = " + "write(" + tmp + ", " + i + ", " + v + ";")
     return (smartConcat(Assume(ACmp((Var(tmp), "=", Var(a)))), smartConcat(ArrayHavoc(a), 
-      Assume(ACmp((Var(a), "=", AWrite(tmp, i, v)))))), newVars)
+      Assume(ACmp((Var(a), "=", AWrite(tmp, replace(i, a, tmp), replace(v, a, tmp))))))), newVars)
   }
 
   /* Translate a ParAssign statement into guarded commands. */
