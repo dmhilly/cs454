@@ -317,7 +317,7 @@ object VCGen {
   /* Translate a ParAssign statement into guarded commands. */
   def GCParAssign(statement: ParAssign, vars: scala.collection.mutable.Map[String, Int]): (GuardedCommand, scala.collection.mutable.Map[String, Int]) = {
     // GC(x1, x2 := e1, e2) = assume tmp1 = x1; assume tmp2 = x2; havoc x1; havoc x2;
-    // assume (x1 = e1[tmp1/x1]); assume (x2 = e2[tmp2/x2]);
+    // assume (x1 = e1[tmp1/x1, tmp2/x2]); assume (x2 = e2[tmp1/x1, tmp2/x2]);
     var x1 = statement.x1
     var x2 = statement.x2
     var e1 = statement.value1
@@ -332,12 +332,8 @@ object VCGen {
       "/" + x2 + "]);")
     return (smartConcat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
           smartConcat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), smartConcat(Havoc(x1), smartConcat(Havoc(x2),
-          smartConcat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
-          Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2))))))))), newVars)
-    /*return (smartConcat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
-            smartConcat(Havoc(x1), smartConcat(Assume(ACmp((Var(x1), "=", replace(e1, x1, tmp1)))), 
-            smartConcat(Assume(ACmp((Var(tmp2), "=", Var(x2)))), smartConcat(Havoc(x2),
-            Assume(ACmp((Var(x2), "=", replace(e2, x2, tmp2))))))))), newVars)*/
+          smartConcat(Assume(ACmp((Var(x1), "=", replace(replace(e1, x2, tmp2), x1, tmp1)))), 
+          Assume(ACmp((Var(x2), "=", replace(replace(e2, x1, tmp1), x2, tmp2))))))))), newVars)
   }
 
   /* Translate an If statement into guarded commands. */
@@ -476,6 +472,7 @@ object VCGen {
   def genVC(gC: GuardedCommand, b: Assertion, vars: scala.collection.mutable.Map[String, Int], arrays: scala.collection.mutable.Map[String, Int]): 
     (Assertion, scala.collection.mutable.Map[String, Int], scala.collection.mutable.Map[String, Int])= {
     var wp : Assertion = null
+    println("command: " + gC + ", B: "+ b)
     if (gC.isInstanceOf[Assume]) {
       var assume = gC.asInstanceOf[Assume]
       return (AImplies(assume.a, b), vars, arrays)
