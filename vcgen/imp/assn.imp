@@ -1,11 +1,8 @@
-program benchmark1
-  pre x = 0
-  post x = 10
+program assign
+  pre x = n
+  pre y = n
+  post x = n + n
+  post y = 0
 is
-  x := 0;
-  while x < 10
-    inv x <= 10
-  do
-    x := x + 1;
-  end
+  x,y := x+y,x-y;
 end

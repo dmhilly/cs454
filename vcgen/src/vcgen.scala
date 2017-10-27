@@ -327,7 +327,7 @@ object VCGen {
     var tmp1 = x1 + "tmp" + newVars(x1)
     var tmp2 = x2 + "tmp" + newVars(x2)
     println("assume " + tmp1 + " = " + x1 + "; assume " + tmp2 + " = " + x2 + 
-      "; havoc " + x1 + "; havoc" + x2 + "; assume (" + x1 + " = " + e1 + 
+      "; havoc " + x1 + "; havoc " + x2 + "; assume (" + x1 + " = " + e1 + 
       "[" + tmp1 + "/" + x1 + "]); assume (" + x2 + " = " + e2 + "[" + tmp2 +
       "/" + x2 + "]);")
     return (smartConcat(Assume(ACmp((Var(tmp1), "=", Var(x1)))), 
@@ -489,7 +489,7 @@ object VCGen {
     } else if (gC.isInstanceOf[Havoc]) {
       var havoc = gC.asInstanceOf[Havoc]
       var newVars = updateMap(havoc.x, vars)
-      return (replaceAssertion(b, havoc.x, havoc.x + "frsh" + newVars(havoc.x)), newVars, arrays) //tmp == null???
+      return (replaceAssertion(b, havoc.x, havoc.x + "frsh" + newVars(havoc.x)), newVars, arrays)
     } else if (gC.isInstanceOf[ArrayHavoc]) {
       var ahavoc = gC.asInstanceOf[ArrayHavoc]
       var newArrays = updateMap(ahavoc.a, arrays)
@@ -615,11 +615,19 @@ object VCGen {
     } else if (vc.isInstanceOf[AForall]){
       var af = vc.asInstanceOf[AForall]
       var val1 = SMThelper(af.a, vars, arrays)
-      return ("(forall ((" + af.x.mkString(" ") + " Int))" + val1._1 + ")", val1._2, val1._3)
+      var fstr = ""
+      for (element <- af.x) {
+        fstr += "(" + element + " Int) "
+      }
+      return ("(forall (" + fstr + ")" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[AExists]){
       var ae = vc.asInstanceOf[AExists]
       var val1 = SMThelper(ae.a, vars, arrays)
-      return ("(exists ((" + ae.x.mkString(" ") + " Int))" + val1._1 + ")", val1._2, val1._3)
+      var estr = ""
+      for (element <- ae.x) {
+        estr += "(" + element + " Int) "
+      }
+      return ("(exists (" + estr + ")" + val1._1 + ")", val1._2, val1._3)
     } else if (vc.isInstanceOf[AParens]){
       var ap = vc.asInstanceOf[AParens]
       return SMThelper(ap.a, vars, arrays)
@@ -662,6 +670,7 @@ object VCGen {
     val reader = new FileReader(args(0))
     import ImpParser._;
     var parsedProgram = parseAll(prog, reader)
+    println(parsedProgram)
     // translate into guarded commands
     val preconditions = parsedProgram.get._2
     val postconditions = parsedProgram.get._3
@@ -681,7 +690,7 @@ object VCGen {
     bw.close()
     // call z3
     println(smtLibFormat)
-    //val process = Process("z3 -smt2 smt.txt").lines
-    //process.foreach(println)
+    val process = Process("z3 -smt2 smt.txt").lines
+    process.foreach(println)
   }
 }
