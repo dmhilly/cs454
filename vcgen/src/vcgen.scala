@@ -436,7 +436,20 @@ object VCGen {
         replaceAssertion(iassert.right, x, tmp))
     } else if (assert.isInstanceOf[AForall]) {
       var fassert = assert.asInstanceOf[AForall]
-      return AForall(fassert.x, replaceAssertion(fassert.a, x, tmp))
+      var newAssert = fassert.a
+      var newList = List[String]()
+      for (element <- fassert.x) {
+        if (!element.endsWith("fa")) {
+          var newElement = element + "fa"
+          newAssert = replaceAssertion(fassert.a, element, newElement)
+          newList ::= newElement
+        }
+        else {
+          newList ::= element
+        }
+      }
+      newList = newList.distinct
+      return AForall(newList, replaceAssertion(newAssert, x, tmp))
     } else if (assert.isInstanceOf[AExists]) {
       var eassert = assert.asInstanceOf[AExists]
       return AExists(eassert.x, replaceAssertion(eassert.a, x, tmp))
@@ -635,7 +648,7 @@ object VCGen {
   /* Translates verification conditions into the SMT Lib format. */
   def vcToSMT(vc: Assertion, arrays: scala.collection.mutable.Map[String, Int]): String = {
     var body = SMThelper(vc, ArrayBuffer[String](), ArrayBuffer[String]())
-    var val1 : String = "" //= body._1
+    var val1 : String = ""
     var val2 : ArrayBuffer[String] = ArrayBuffer[String]()
     var val3 : ArrayBuffer[String] = ArrayBuffer[String]()
     if (body == null) {
@@ -671,6 +684,7 @@ object VCGen {
     val postconditions = parsedProgram.get._3
     val block = parsedProgram.get._4
     var guardedProgram = computeGC(preconditions, postconditions, block)
+    println(guardedProgram)
     // generate verification conditions
     var verificationConditions = genVC(guardedProgram, ACmp((Num(1), "=", Num(1))), 
       scala.collection.mutable.Map[String, Int](), scala.collection.mutable.Map[String, Int]())
@@ -683,7 +697,7 @@ object VCGen {
     bw.close()
     // call z3
     println(smtLibFormat)
-    //val process = Process("z3 -smt2 smt.txt").lines
-    //process.foreach(println)
+    val process = Process("z3 -smt2 smt.txt").lines
+    process.foreach(println)
   }
 }
